@@ -1,0 +1,767 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">
+<HTML>
+<HEAD>
+<META NAME="generator" CONTENT="http://txt2tags.org">
+<TITLE>Aurora Monitor</TITLE>
+</HEAD><BODY BGCOLOR="white" TEXT="black">
+<CENTER>
+<H1>Aurora Monitor</H1>
+</CENTER>
+
+<P></P>
+<HR NOSHADE SIZE=1>
+<P></P>
+
+  <UL>
+  <LI><A HREF="#toc1">1. Introduction</A>
+  <LI><A HREF="#toc2">2. Installation</A>
+    <UL>
+    <LI><A HREF="#toc3">2.1. Windows</A>
+    <LI><A HREF="#toc4">2.2. Linux</A>
+    </UL>
+  <LI><A HREF="#toc5">3. Setup</A>
+      <UL>
+      <LI><A HREF="#toc6">Settings -&gt; Setup  dialog</A>
+      <LI><A HREF="#toc7">Settings -&gt; Location dialog</A>
+      <LI><A HREF="#toc8">Settings -&gt; Inverter dialog</A>
+      <LI><A HREF="#toc9">Settings -&gt; PVOutput.org</A>
+      </UL>
+  <LI><A HREF="#toc10">4. Inverter Menu</A>
+      <UL>
+      <LI><A HREF="#toc11">Inverter information</A>
+      <LI><A HREF="#toc12">Set inverter time</A>
+      <LI><A HREF="#toc13">Reset partial energy and time</A>
+      <LI><A HREF="#toc14">Retrieve daily energy</A>
+      <LI><A HREF="#toc15">Retrieve 10 second energy</A>
+      </UL>
+  <LI><A HREF="#toc16">5. Keys</A>
+  <LI><A HREF="#toc17">6. Files</A>
+    <UL>
+    <LI><A HREF="#toc18">6.1. Inverter data files</A>
+    <LI><A HREF="#toc19">6.2. Daily totals files</A>
+    <LI><A HREF="#toc20">6.3. Five minute energy files</A>
+    <LI><A HREF="#toc21">6.4. System directory</A>
+    </UL>
+  <LI><A HREF="#toc22">7. Charts</A>
+    <UL>
+    <LI><A HREF="#toc23">7.1. Charts settings dialog</A>
+      <UL>
+      <LI><A HREF="#toc24">7.1.1. Graph Types</A>
+      <LI><A HREF="#toc25">7.1.2. Colour and Style</A>
+      <LI><A HREF="#toc26">7.1.3. Status Bar type</A>
+      <LI><A HREF="#toc27">7.1.4. Scale</A>
+      </UL>
+    <LI><A HREF="#toc28">7.2. The Default Charts</A>
+    <LI><A HREF="#toc29">7.3. Status Bar</A>
+    <LI><A HREF="#toc30">7.4. Extra Readings</A>
+    </UL>
+  <LI><A HREF="#toc31">8. Histograms</A>
+  </UL>
+
+<P></P>
+<HR NOSHADE SIZE=1>
+<P></P>
+
+<A NAME="toc1"></A>
+<H1>1. Introduction</H1>
+
+<P>
+The <B>Aurora Monitor</B> graphical application program continuously monitors the
+power output and other information from either one or two Power-One Aurora inverters.
+It displays continuously updated graphs, numerical values, and alarm status.
+</P>
+<P>
+It also stores the data so that graphs from previous days can be displayed.
+</P>
+<P>
+<I>Author: &nbsp; Jonathan Duddington &nbsp; <A HREF="mailto:jonsd@users.sourceforge.net">jonsd@users.sourceforge.net</A></I>
+</P>
+<P>
+ <BR>
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc2"></A>
+<H1>2. Installation</H1>
+
+<A NAME="toc3"></A>
+<H2>2.1. Windows</H2>
+
+<P>
+Run the installer:  <B>setup_auroramon.exe</B>.
+</P>
+
+<A NAME="toc4"></A>
+<H2>2.2. Linux</H2>
+
+<P>
+You will need to have the <B>wxWidgets</B> libraries installed on your computer.
+</P>
+<P>
+For Debian, Ubuntu and similar distributions, you need package <B>libwxgtk2.8-0</B> to run
+the <B>Aurora Monitor</B> program.  You will also need package <B>libwxgtk2.8-dev</B> to
+compile it from the program source code.
+</P>
+<P>
+Alternatively, wxWidgets is available from <A HREF="http://www.wxwidgets.org">www.wxwidgets.org</A>.
+</P>
+<P>
+Run <B>make</B> in the <B>src</B> directory to produce the <B>auroramon</B> executable file.
+</P>
+<P>
+After you have run <B>auroramon</B> and created its data directory, you can copy the
+<B>help.html</B> file into the <B>system</B> sub-directory so that it can be accessed from
+within the <B>Aurora Monitor</B> program.
+</P>
+<P>
+ <BR>
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc5"></A>
+<H1>3. Setup</H1>
+
+<A NAME="toc6"></A>
+<H3>Settings -&gt; Setup  dialog</H3>
+
+<DL>
+<DT>Serial port</DT><DD>
+<P></P>
+</DL>
+
+	<BLOCKQUOTE>
+	This is the serial port to which the inverters are connected.  For example <B>COM1</B> on Windows or
+	<B>/dev/ttyS0</B> on Linux.
+	</BLOCKQUOTE>
+	<BLOCKQUOTE>
+	If you use a USB to RS-485 converter plugged into a USB port on the computer
+	then this will be available as virtual serial port (as a higher numbered COM port on Windows, or as
+	a device such as <B>/dev/ttyUSB0</B> on Linux).
+	</BLOCKQUOTE>
+
+<DL>
+<DT>Inverter addresses</DT><DD>
+<P></P>
+</DL>
+
+	<BLOCKQUOTE>
+	<B>Aurora Monitor</B> can manage either one or two Aurora inverters.  Enter the address of each inverter here.
+	</BLOCKQUOTE>
+	<BLOCKQUOTE>
+	For a single inverter system, the inverter address (which is usually the default value 2)
+	should be put into the first address field, and the other field is left blank.
+	</BLOCKQUOTE>
+
+<DL>
+<DT>Data directory</DT><DD>
+<P></P>
+</DL>
+
+	<BLOCKQUOTE>
+	This is the directory where <B>Aurora Monitor</B> creates data files which contain the power and other information from the inverters.
+	Within this directory, <B>Aurora Monitor</B> creates directories named <B>2012</B>, <B>2013</B> etc for each year during which data is received.
+	</BLOCKQUOTE>
+
+<A NAME="toc7"></A>
+<H3>Settings -&gt; Location dialog</H3>
+
+<DL>
+<DT>Longitude , Latitude</DT><DD>
+</DL>
+
+	<BLOCKQUOTE>
+	These are used to calculate the sun elevation curve and the sunrise and sunset times at your location.
+	Values can be entered either as fractions of degrees or as degrees:minutes:seconds.
+	</BLOCKQUOTE>
+	<BLOCKQUOTE>
+	Longitudes west of longitude zero are negative. Latitudes in the southern hemisphere are negative.
+	</BLOCKQUOTE>
+
+<DL>
+<DT>Time zone</DT><DD>
+<P></P>
+</DL>
+
+	<BLOCKQUOTE>
+	If the <B>auto</B> button is checked then the timezone will be set automatically from the computer's clock each day. 
+	This timezone value is only used to calculate the sun position and times.  It does not affect the times in data logs.
+	Timezone values are hours east of 0 degrees	longitude.  For example North American EST is -5.0.
+	</BLOCKQUOTE>
+
+<DL>
+<DT>Panel groups</DT><DD>
+<P></P>
+</DL>
+
+	<BLOCKQUOTE>
+	You can enter the tilt angle (degrees from horizontal) and the facing direction (degrees clockwise from north)
+	for one or two groups of solar panels.  This information (along with Longitude and Latitude) is used to calculate
+	Solar Intensity graphs.
+	</BLOCKQUOTE>
+
+<A NAME="toc8"></A>
+<H3>Settings -&gt; Inverter dialog</H3>
+
+<DL>
+<DT>Auto retrieve 5 minute energy data</DT><DD>
+<P></P>
+</DL>
+
+	<BLOCKQUOTE>
+	When <B>Aurora Monitor</B> is run for the first time each day, it retrives the 10 second energy data from the
+	inverter.  It stores it as a file <B>yyyy_out/rA_yyyymmdd</B> (where <B>A</B> is the inverter address and <B>yyyymmdd</B>
+	is today's date), as 5 minute data suitable for use with pvoutput.org.   The 10 second energy data is also
+	used to fill in any gaps in the power output chart.
+	</BLOCKQUOTE>
+
+<A NAME="toc9"></A>
+<H3>Settings -&gt; PVOutput.org</H3>
+
+<P>
+Aurora monitor can send regular data updates to the <A HREF="http://pvoutput.org">http://pvoutput.org</A> website. 
+The default URL is for sending data <A HREF="http://pvoutput.org/service/r2/">http://pvoutput.org/service/r2/</A> which needs a <B>System Id</B> and <B>API Key</B>
+to gain access.
+</P>
+<P>
+If an internet connection to pvoutput.org is not available, the <B>Aurora Monitor</B> stores the data and sends it
+later when a connection is established.
+</P>
+<P>
+ <BR>
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc10"></A>
+<H1>4. Inverter Menu</H1>
+
+<A NAME="toc11"></A>
+<H3>Inverter information</H3>
+
+<P>
+This displays:
+</P>
+
+<OL>
+<LI>Inverter model information.
+<LI>Total time that the inverter has been running.
+<LI>Partial running time, since the partial counts were last reset.
+<LI>Total time that the inverter has been connected to the grid.
+<LI>The difference between computer time and inverter time.
+</OL>
+
+<A NAME="toc12"></A>
+<H3>Set inverter time</H3>
+
+<P>
+This displays the current computer time and inverter time.  It allows the inverter time to be set to either
+a specified time, or to match the computer time.
+</P>
+
+<A NAME="toc13"></A>
+<H3>Reset partial energy and time</H3>
+
+<P>
+This resets the partial energy total, and the partial running time count.
+</P>
+
+<A NAME="toc14"></A>
+<H3>Retrieve daily energy</H3>
+
+<P>
+This retrieves the daily energy totals which are stored in the inverter.
+</P>
+<P>
+The <B>verbose</B> option reads the contents of the entire data area, whether or not it contains valid data.
+</P>
+
+<A NAME="toc15"></A>
+<H3>Retrieve 10 second energy</H3>
+
+<P>
+This retrieves the 10 second energy totals which are stored in the inverter.  These are given as average power
+levels for each 10 second period.
+</P>
+<P>
+If the <B>5 minute data</B> option is set, then average power levels are given for 5 minute periods, in a form
+which is suitable for uploading to <A HREF="http://pvoutput.org">http://pvoutput.org</A>
+</P>
+<P>
+The menu option <B>Settings -&gt; Inverter -&gt; Auto_retrieve_5_minute_energy_data</B> tells <B>Aurora Monitor</B> to
+automatically retrieve the energy data (with the 5 minute data option) the first time that it runs each day.
+It stores the information in a file: <B>yyyy_out/rA_yyyymmdd</B> where <B>A</B> is the inverter address and <B>yyyymmdd</B>
+is today's date.
+</P>
+<P>
+Whenever the 10 second (or 5 minute) energy data is retrieved, it is also used to fill in any gaps in the
+power ouput graph, for example for periods during which <B>Aurora Monitor</B> was not collecting data from the inverter.
+</P>
+<P>
+ <BR>
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc16"></A>
+<H1>5. Keys</H1>
+
+<P>
+These keys can be used in the graph window:
+</P>
+
+<TABLE BORDER="1" CELLPADDING="4">
+<TR valign="top">
+<TD><B>F2</B></TD>
+<TD>Display the continuously updated graphs of today's data from the inverters.</TD>
+</TR>
+<TR valign="top">
+<TD><B>F3</B></TD>
+<TD>Display a histogram of daily energy totals for past days.</TD>
+</TR>
+<TR valign="top">
+<TD><B>F4</B></TD>
+<TD>Display the inverter status and current alarm state.</TD>
+</TR>
+<TR valign="top">
+<TD><B>F11</B></TD>
+<TD>Toggle full-screen display.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Escape</B></TD>
+<TD>End full-screen display.</TD>
+</TR>
+<TR valign="top">
+<TD><B>[</B></TD>
+<TD>Show the charts for the previous day.</TD>
+</TR>
+<TR valign="top">
+<TD><B>]</B></TD>
+<TD>Show the charts for the next day.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Page Up</B></TD>
+<TD>Display the next chart page.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Page Down</B></TD>
+<TD>Display the previous chart page.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Home</B></TD>
+<TD>Display the first chart page.</TD>
+</TR>
+<TR valign="top">
+<TD><B>End</B></TD>
+<TD>Display the last chart page.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Up,  Down</B></TD>
+<TD>Change the y-scale (for power graphs only).</TD>
+</TR>
+<TR valign="top">
+<TD><B>Left,  Right</B></TD>
+<TD>Horizontal scroll.</TD>
+</TR>
+<TR valign="top">
+<TD><B>&lt;</B> &nbsp; <B>&gt;</B></TD>
+<TD>Change the x-scale.</TD>
+</TR>
+</TABLE>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc17"></A>
+<H1>6. Files</H1>
+
+<P>
+<B>Aurora Monitor</B> creates files in the data directory which is specified in <B>Settings -&gt; Setup</B>.
+</P>
+<P>
+A year directory is created for each year during which data is received from the inverters.
+The names of these are the year names eg. <B>2012</B>, <B>2013</B>.
+</P>
+<P>
+A year directory contains:
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc18"></A>
+<H2>6.1. Inverter data files</H2>
+
+<P>
+There is a file for each inverter and for each day during which data is received.
+The file names are of the form:
+</P>
+<P>
+<B>dA_yyyymmdd</B>.txt where <B>A</B> is the inverter address and <B>yyyymmdd</B> is the date.
+</P>
+<P>
+Each line contains the fields.
+</P>
+
+<OL>
+<LI>Time in the form:  hh:mm:ss
+<LI>Output power, Watts
+<LI>Input power to string 1, Watts
+<LI>Input voltage to string 1, Volts
+<LI>Input power to string 2. Watts
+<LI>Input voltage to string 2, Volts
+<LI>Temperature, degrees C
+</OL>
+
+<P>
+Each line contains the average of the values which have been received from the inverter during
+a 10 second period.  The time shown is the computer time at the start of the period.
+</P>
+<P>
+Additional fields can be added by using the <B>Settings -&gt; Extra readings</B> dialog (see 6.4 below).
+These are only read once for each 10 second period.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc19"></A>
+<H2>6.2. Daily totals files</H2>
+
+<P>
+There is a single text file for the year for each inverter.
+The file name is of the form: <B>inverterN_A_yyyy</B>.txt
+where <B>N</B> is inverter number 0 or 1, <B>A</B> is the inverter address, and <B>yyyy</B> is the year.
+</P>
+<P>
+Each line contains the energy totals at the end of a day.
+This data is written to the file when the first power reading for the next day is received.
+</P>
+<P>
+If there is a gap of one or more days when the <B>Aurora Monitor</B> program does not run, or does not receive
+any data, then those days will not be written to the file and the next day will have a <B>today</B> value
+which includes the totals for the missing days.
+In this case you could edit the file to add the <B>date</B> and <B>today</B> if you know the values,
+for example by using data from the <I>aurora -k</I> command on Linux, or exported from <I>Aurora Communicator</I> on Windows.
+This will enable the <B>Aurora Monitor</B> histogram to display correctly.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc20"></A>
+<H2>6.3. Five minute energy files</H2>
+
+<P>
+The directory <B>yyyy_out</B> (where yyyy is the year) contains a file <B>e5min_yyyymmdd.txt</B> for each inverter
+for each day during which data is received.
+These contain the total <B>Energy Generated</B> for the day, the instantaneous <B>Power Generated</B>, and the
+<B>Grid Voltage</B> at 5 minute intervals in a form which is suitable for pasting into the "Live Loader"
+form at <A HREF="http://www.pvoutput.org">www.pvoutput.org</A>.
+</P>
+<P>
+Alternatively, <B>Settings-&gt;PVOutput.org</B> can be used to send data to <A HREF="http://www.pvoutput.org">www.pvoutput.org</A> automatically
+every 5, 10, or 15 minutes.
+</P>
+<P>
+Note that <B>Power Generated</B> data for <A HREF="http://www.pvoutput.org">www.pvoutput.org</A> can also be retrieved from the inverter using
+<B>Inverter -&gt; Retrieve 10sec energy</B> from the menu-bar and ticking the <B>5 min data for PVOutput.org</B> option.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc21"></A>
+<H2>6.4. System directory</H2>
+
+<P>
+In addition to the year directories, a <B>system</B> directory may be created.  This can contain:
+</P>
+
+<UL>
+<LI>Inverter information files.
+<P></P>
+</UL>
+
+	<BLOCKQUOTE>
+	These have filenames of the form <B>InverterInfoA</B> where <B>A</B> is the inverter address.
+	They are text files which contain the inverter's serial number and version information and are produced and
+	displayed when <B>Help -&gt; Inverter Information</B> is chosen from the menu-bar.
+	</BLOCKQUOTE>
+
+<UL>
+<LI>Chart settings.
+<P></P>
+</UL>
+
+	<BLOCKQUOTE>
+	This has the filename <B>chartinfo</B>.  It is a text file which is produced when chart settings are
+	changed by using <B>Setting -&gt; Charts</B> from the menu-bar.
+	</BLOCKQUOTE>
+
+<UL>
+<LI>Alarms.
+<P></P>
+</UL>
+
+	<BLOCKQUOTE>
+	These have filenames of the form <B>alarmsN_A.txt</B> where <B>N</B> is the inverter number 0 or 1, and <B>A</B> is then
+	inverter address.  They list the time and type of alarms which occurred while <B>Aurora Monitor</B> was running.
+	</BLOCKQUOTE>
+<P>
+ <BR>
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc22"></A>
+<H1>7. Charts</H1>
+
+<P>
+<B>Aurora Monitor</B> provides several pages of charts which plot the power, temperature, voltage, etc. during the day.
+The default set of chart pages can be changed by using <B>Settings -&gt; Charts</B> from the menu-bar.
+Some chart pages are only displayed if more than one inverter address has been entered in <B>Settings -&gt; Setup</B>.
+</P>
+<P>
+The <B>Page Down</B>, <B>Page Up</B>, <B>Home</B>, and <B>End</B>  keys switch between chart pages.
+</P>
+<P>
+The &nbsp; <B>[</B> &nbsp; and &nbsp; <B>]</B> &nbsp; keys move between different days.  The <B>F2</B> key returns to today's chart.
+ <BR>&nbsp;
+</P>
+
+<A NAME="toc23"></A>
+<H2>7.1. Charts settings dialog</H2>
+
+<P>
+In the <B>Charts settings</B> dialog from <B>Settings -&gt; Charts</B> each page can be given a name and up to 5 different
+graphs to display.
+ <BR>&nbsp;
+</P>
+
+<A NAME="toc24"></A>
+<H3>7.1.1. Graph Types</H3>
+
+<P>
+For each of the 5 graphs, the graph type is chosen from a menu at the left which contains the following options.
+For some options, an inverter (<B>A</B> or <B>B</B>) must also be specified.
+</P>
+
+<TABLE CELLPADDING="4">
+<TR valign="top">
+<TD><B>none</B></TD>
+<TD>Indicates that this graph is not used.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Power Total</B></TD>
+<TD>Show the total power from both inverters.<BR>This graph is only visible if 2 inverter addresses have been specified in <B>Settings -&gt; Setup</B>.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Power Output</B></TD>
+<TD>The power output from the inverter.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Power&nbsp;Input1</B> <BR> <B>Power&nbsp;Input2</B></TD>
+<TD>These show the power input to string 1 and string 2 respectively of the inverter.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Power&nbsp;min&nbsp;of&nbsp;1&amp;2</B></TD>
+<TD>This shows the lesser of the input power to string 1 and the input power to string 2.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Power Balance</B></TD>
+<TD>This shows the percentage of the power input to string 1 compared to the total power input.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Voltage 1</B> <BR> <B>Voltage 2</B></TD>
+<TD>These show the input voltage to string 1 and string 2 of the inverter.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Current 1</B> <BR> <B>Current 2</B></TD>
+<TD>These show the input current to string 1 and string 2 of the inverter.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Sun Elevation</B></TD>
+<TD>This shows how the angle of the sun above the horizon changes during the day. The Longitude, Latitude, and Time Zone, must be set correctly in <B>Settings -&gt; Setup</B>. If the <B>Max</B> value is left at zero then it will automatically choose a scale to match the maximum elevation of the sun at your location.</TD>
+</TR>
+<TR valign="top">
+<TD><B>Solar Intensity</B></TD>
+<TD>Shows the theoretical solar intensity in Watts per square metre, taking into account the elevation of the sun and the tilt and facing direction of the panels. Choose <B>A</B> or <B>B</B> to select which panel group.  The calculation uses equations A.3 and I.1 from <A HREF="http://en.wikipedia.org/wiki/Air_mass_%28solar_energy%29">http://en.wikipedia.org/wiki/Air_mass_%28solar_energy%29</A></TD>
+</TR>
+<TR valign="top">
+<TD><B>Temperature</B></TD>
+<TD>The higher of the Inverter Temperature and Booster Temperature values from the inverter.</TD>
+</TR>
+</TABLE>
+
+<A NAME="toc25"></A>
+<H3>7.1.2. Colour and Style</H3>
+
+<P>
+Click on the coloured **Colour* button to the right of the graph type to change the colour in which the graph is drawn.
+</P>
+<P>
+The <B>Style</B> option determines whether the graph is drawn as a line, a thick line, or as a solid filled area.
+ <BR>&nbsp;
+</P>
+
+<A NAME="toc26"></A>
+<H3>7.1.3. Status Bar type</H3>
+
+<P>
+For each page, the <B>Status bar</B> field in the <B>chart dialog</B> determines which data values are displayed numerically in the status bar under the graph.
+This only has an effect if more than one inverter address has been set.
+</P>
+
+<TABLE CELLPADDING="4">
+<TR valign="top">
+<TD><B>all</B></TD>
+<TD>Shows all the fields for both inverters.</TD>
+</TR>
+<TR valign="top">
+<TD><B>some</B> &nbsp; &nbsp;</TD>
+<TD>Shows fields for both inverters, but omits the energy totals (except the <B>today</B> total).</TD>
+</TR>
+<TR valign="top">
+<TD><B>invA</B></TD>
+<TD>Only shows fields for Inverter A.</TD>
+</TR>
+<TR valign="top">
+<TD><B>invB</B></TD>
+<TD>Only shows fields for Inverter B.</TD>
+</TR>
+</TABLE>
+
+<A NAME="toc27"></A>
+<H3>7.1.4. Scale</H3>
+
+<P>
+One of the graphs on chart page should have its <B>Scale</B> set to <B>left</B>.  This will show a white vertical scale
+at the left side of the screen.  The <B>Min</B> and <B>Max</B> fields give the range of the scale.
+</P>
+<P>
+The <B>right</B> option can be used for another graph, and this will show a secondary scale on the right side of the
+screen, but without horizontal grid lines.  This scale is shown in the same colour as the graph.
+</P>
+<P>
+The <B>backg</B> option means that the graph is drawn underneath the scale grid.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc28"></A>
+<H2>7.2. The Default Charts</H2>
+
+<P>
+(These default settings are subject to change).
+</P>
+<P>
+Page 1 shows the total power output as a solid graph.  If two inverters are specified then the total solid area
+shows the combined power, while the output from Inverter A is shown as an area of darker colour.
+</P>
+<P>
+Page 2 shows the power input for the 2 strings of Inverter A.  Purple areas show where string 1 provides greater input power
+than string 2.  Red areas show where string 2 provides greater power.  If there is only pink and no purple or red, then
+both strings are receiving equal power.  This chart is useful (in cases where both strings have the same number of
+panels) to show when one set of panels is shaded more than the other.
+</P>
+<P>
+Page 3 shows line graphs of the inverter temperature and the percentage efficiency (power output / power input).
+</P>
+<P>
+Page 4 shows the ratio of the power input from the two strings.  This may be useful for showing shading of one or
+the other strings.
+</P>
+<P>
+Page 5 shows line graphs of the input voltages from the 2 strings, and also a line graph of the grid voltage.
+</P>
+<P>
+On pages 3, 4, and 5 the power output is also shown for reference as a solid dark grey graph underneath the grid lines.
+</P>
+<P>
+If there are two inverters, then pages 2 to 5 are repeated for the second inverter.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc29"></A>
+<H2>7.3. Status Bar</H2>
+
+<P>
+The <B>Status Bar</B> is below the chart page.  It shows continually updated numerical readings from the inverters.
+</P>
+<P>
+If more than one inverter address has been set, then the contents of the Status Bar can be varied for each
+chart page to show the readings for either one or the other inverter, or both.
+</P>
+<P>
+The large number at the far left shows the total output power from both inverters.
+</P>
+<P>
+Next to this is a flashing light for each inverter.
+</P>
+<P>
+It shows <B>green</B> when the inverter is responding.
+It flashes <B>green</B> whenever a response is received from that inverter.
+It flashes <B>yellow</B> if a request to the inverter had to be re-sent.
+</P>
+<P>
+It shows <B>yellow</B> when the inverter has an alarm, or a status other than normal running.
+</P>
+<P>
+It shows <B>red</B> when there is no communication with the inverter.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="toc30"></A>
+<H2>7.4. Extra Readings</H2>
+
+<P>
+Extra measurements form the inverters can be displayed, in addition to the graph types listed in 6.1.1 above,
+and the default set of numeric values on the Status Bar.
+</P>
+<P>
+Open the <B>Settings -&gt; Extra readings</B> dialog from the menu-bar.  This allows you to add from a list of
+extra reading types.  If you check the <B>Numeric</B> option then the reading is added to the Status Bar.  If you
+check the <B>Graph</B> option then values for this item are stored in the Inverter Data files (see 5.1 above)
+and an additional item is added to the list of graph types in the <B>Chart settings dialog</B>.
+</P>
+<P>
+Some of these extra readings may not produce data on some models of inverter.
+</P>
+<P>
+ <BR>
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<A NAME="toc31"></A>
+<H1>8. Histograms</H1>
+
+<P>
+<B>Display -&gt; Histogram</B> or <B>F3</B> shows the Histogram display.
+</P>
+<P>
+<B>Page Down</B> and <B>Page Up</B> changes the display to show <B>Daily</B> values, <B>Weekly average</B> values
+or <B>Monthly average</B> values of energy output.
+</P>
+<P>
+The vertical scale can be set by specifying the maximum daily energy value in <B>Settings -&gt; Histogram</B>.
+</P>
+<P>
+If daily values are not available for some days (see <B>Daily totals files</B> above), then the <B>Weekly average</B>
+display shows averaged values in dark grey.
+</P>
+<P>
+Double-click on a day in the <B>Daily</B> values display shows the charts for that day.
+</P>
+
+<HR NOSHADE SIZE=1>
+
+<!-- html code generated by txt2tags 2.6 (http://txt2tags.org) -->
+<!-- cmdline: txt2tags -thtml -\-toc help.t2t -->
+</BODY></HTML>
