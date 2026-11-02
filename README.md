@@ -6,20 +6,52 @@ This is a continuation of [Aurora Monitor](https://sourceforge.net/projects/auro
 
 ## Building on Linux
 
-Version 1.08 needs wxWidgets 3.1.5 or later.
+Version 1.08 needs wxWidgets 3.1.5 or later. Run `wx-config --version` to check what you have. The package below is for Debian and Ubuntu. It may have a different name on other distributions, and Ubuntu 22.04's default wxWidgets is too old.
 
 ```sh
-sudo apt install build-essential libwxgtk3.2-dev
-cd src
-make
+sudo apt install build-essential git libwxgtk3.2-dev
+git clone https://github.com/uklad/auroramon.git
+cd auroramon/src
+make -j"$(nproc)"
 ./auroramon
 ```
 
-To add a launcher and icon to your desktop's applications menu, run `icons/install-desktop.sh path/to/auroramon`. Add `--uninstall` instead of the path to remove them.
+These steps haven't been tested on a clean machine.
+
+### Setting up after building
+
+Choose your data directory in Settings → Setup, then do any of these that you need. The commands run from `src`, and the example data directory is `~/aurora`.
+
+- **Help:** copy the guide into the data directory's `system` folder:
+
+  ```sh
+  mkdir -p ~/aurora/system
+  cp ../help.html ~/aurora/system/
+  ```
+
+- **Launcher and icon:** add them to your desktop's applications menu. Use `--uninstall` instead of the path to remove them.
+
+  ```sh
+  ../icons/install-desktop.sh "$PWD/auroramon"
+  ```
+
+- **Serial port:** if the inverter connects to this computer, you'll probably need access to the port. Log out and back in afterwards.
+
+  ```sh
+  sudo usermod -aG dialout "$USER"
+  ```
+
+### Moving from another computer
+
+Copy `~/.aurora` and your data directory from the old computer. `~/.aurora` contains your PVOutput API key, so transfer it securely. If your username is different, update the `data=` path in it.
+
+### Updating
+
+Run `git pull` in the repository, then `make` again in `src`. If `help.html` has changed, copy it to the data directory again.
 
 ## Building on Windows
 
-Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the run's Artifacts on the Actions page.
+You don't need to build it yourself. Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the latest run's Artifacts on the [Actions page](https://github.com/uklad/auroramon/actions), unzip it and run `auroramon.exe`. GitHub asks you to log in to download Artifacts, and it deletes them after 90 days unless the repository is set to keep them for less.
 
 To build it yourself, in the MSYS2 UCRT64 shell:
 
