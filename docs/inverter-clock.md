@@ -54,7 +54,14 @@ The reasons for these rules:
 
 ### If setting the clock fails
 
-The failure is logged, but it isn't retried straight away. It's tried again at the next scheduled check, the next daylight saving change, or the next program start. No message box appears, because this can run unattended.
+Each failure is logged, with no message box, because this can run unattended. The program then tries again:
+
+1. **At the next poll:** this reads the clock again and makes the decision again, up to 3 attempts in all (`CLOCK_SET_ATTEMPTS`). Attempts were about 13 seconds apart in testing. Each attempt sends the message up to 3 times.
+2. **In about an hour:** after 3 failed attempts it waits, then starts a new check with 3 more attempts (`CLOCK_RETRY_WAIT`). A shorter sync interval still applies, so Every hour isn't delayed. This repeats until it works.
+
+Reading the clock before each attempt handles a lost reply. If the inverter took the new time but its answer never arrived, the clock now looks right, so it isn't written again and the log says `clock is now correct`.
+
+An inverter that's asleep doesn't use up attempts, because nothing is written until it answers a poll. A daylight saving change or a program start also begins a new check.
 
 ## How the clock is written
 
@@ -75,7 +82,9 @@ Automatic sync writes these to the **Message log** (Logs → Message log, or `sy
 |---|---|
 | `Inverter #2: clock differs from computer time by 120 seconds, setting it` | A difference was found, and the set was queued |
 | `Inverter #2: clock set to computer time` | The set worked |
-| `Inverter #2: failed to set the clock` | The set failed |
+| `Inverter #2: failed to set the clock, trying again` | An attempt failed, and it will try again at the next poll |
+| `Inverter #2: failed to set the clock after 3 attempts, will try again in about an hour` | All 3 attempts failed |
+| `Inverter #2: clock is now correct` | An attempt looked as if it failed, but the inverter did take the new time |
 | `Inverter #2: clock differs from computer time by 100000 seconds. Not changed, use Inverter->Set inverter time` | The difference is over 26 hours |
 
 The number is the inverter's time minus computer time, so a positive value means the inverter is ahead. If the set worked, `system/com_log.txt` shows the result in a line such as `difference is now 1`.
@@ -105,7 +114,7 @@ To try it on Linux, set the Serial Port in Settings → Setup to `/tmp/ttyAurora
 python3 tests/fake_inverter.py --link /tmp/ttyAurora --addr 2 --clock-error 120 --log requests.txt
 ```
 
-`--log` records each request, so message 71 in `requests.txt` shows each write. `--clock-drift` makes the clock gain time steadily, for testing regular syncs.
+`--log` records each request, so message 71 in `requests.txt` shows each write. `--clock-drift` makes the clock gain time steadily, for testing regular syncs. `--fail-sets` and `--lose-set-replies` test failures. To test the wait after 3 failed attempts without waiting an hour, build with a shorter wait: `make CXXFLAGS="-O2 -DCLOCK_RETRY_WAIT=40"`.
 
 To test a daylight saving change without waiting for one, start the program with a `TZ` rule that changes shortly after it starts. For example, this ends daylight saving at 14:30:00 local time on day 306 of the year. Change the day and time to just ahead of now (`date +%j` shows today's day number):
 
