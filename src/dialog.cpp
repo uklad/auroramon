@@ -43,31 +43,38 @@ END_EVENT_TABLE()
 wxString date_formats[N_DATE_FORMATS] = {_T("2012-12-31"), _T("Local"), _T("31 Dec 2012"), _T("31.12.2012")};
 
 DlgSetup::DlgSetup(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Setup"), wxDefaultPosition, wxSize(320,280+DLG_HX))
+    : wxDialog(parent, -1, _T("Setup"))
 {//=================================
-    int y;
-    int x;
-    x = 96;
-    y = 22;
-    t_serialport = new wxTextCtrl(this, dlgSerialPort, serial_port, wxPoint(x, y), wxSize(200, 20));
-    new wxStaticText(this, -1, _T("Serial port"), wxPoint(8, y+2));
-    y = 62;
-    t_inverter1 = new wxTextCtrl(this, dlgInverter1, wxString::Format(_T("%d"), inverter_address[0]), wxPoint(x+20,y), wxSize(40, 20));
-    t_inverter2 = new wxTextCtrl(this, dlgInverter2, wxString::Format(_T("%d"), inverter_address[1]), wxPoint(x+60,y), wxSize(40, 20));
-    new wxStaticText(this, -1, _T("Inverter addresses"), wxPoint(8, y+2));
-    y = 96;
-    new wxStaticText(this, -1, _T("Data directory"), wxPoint(8, y));
-    t_data_dir = new wxTextCtrl(this, dlgDataDir, data_dir, wxPoint(6, y+16), wxSize(306, 20));
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(2, DLG_GAP, 2*DLG_GAP);
+    wxBoxSizer *addresses = new wxBoxSizer(wxHORIZONTAL);
 
-    y = 144;
-    t_date_format = new wxChoice(this, -1, wxPoint(x, y), wxDefaultSize, N_DATE_FORMATS, date_formats);
-    new wxStaticText(this, -1, _T("Date format"), wxPoint(8, y+4));
+    t_serialport = new wxTextCtrl(this, dlgSerialPort, serial_port, wxDefaultPosition, wxSize(320, -1));
+    t_inverter1 = new wxTextCtrl(this, dlgInverter1, wxString::Format(_T("%d"), inverter_address[0]), wxDefaultPosition, wxSize(60, -1));
+    t_inverter2 = new wxTextCtrl(this, dlgInverter2, wxString::Format(_T("%d"), inverter_address[1]), wxDefaultPosition, wxSize(60, -1));
+    t_data_dir = new wxTextCtrl(this, dlgDataDir, data_dir, wxDefaultPosition, wxSize(320, -1));
+    t_date_format = new wxChoice(this, -1, wxDefaultPosition, wxDefaultSize, N_DATE_FORMATS, date_formats);
 
-    y = 240;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(130,y));
+    addresses->Add(t_inverter1);
+    addresses->Add(t_inverter2, 0, wxLEFT, DLG_GAP);
+
+    grid->AddGrowableCol(1);
+    AddGridLabel(this, grid, _T("Serial port"));
+    grid->Add(t_serialport, 0, wxEXPAND);
+    AddGridLabel(this, grid, _T("Inverter addresses"));
+    grid->Add(addresses);
+    AddGridLabel(this, grid, _T("Data directory"));
+    grid->Add(t_data_dir, 0, wxEXPAND);
+    AddGridLabel(this, grid, _T("Date format"));
+    grid->Add(t_date_format);
+
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(220,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
 
+    top->Add(grid, 1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 }
 
 void DlgSetup::ShowDlg()
@@ -100,27 +107,33 @@ void DlgSetup::OnButton(wxCommandEvent &event)
     id = event.GetId();
     if(id == dlgOK)
     {
-        serial_port = t_serialport->GetValue();
-        value = 0;
-        t_inverter1->GetValue().ToLong(&value);
-        inverter_address[0] = value;
-        t_inverter2->GetValue().ToLong(&value);
-        inverter_address[1] = value;
-        data_dir = t_data_dir->GetValue();
+        dir = t_data_dir->GetValue();
+        if(!wxDirExists(dir))
+        {
+            // ask before anything is changed, the dialog stays open if the answer is No
+            if(wxMessageBox(_T("Create directory '") + dir + _T("' ?"), _T("Setup"), wxYES_NO, this) != wxYES)
+            {
+                return;
+            }
+            wxMkdir(dir);
+        }
+
+        {
+            wxMutexLocker lock(comms_mutex);   // the inverter thread reads these
+            serial_port = t_serialport->GetValue();
+            value = 0;
+            t_inverter1->GetValue().ToLong(&value);
+            inverter_address[0] = value;
+            value = 0;   // a blank field means no inverter
+            t_inverter2->GetValue().ToLong(&value);
+            inverter_address[1] = value;
+            data_dir = dir;
+        }
 
         option_date_format = t_date_format->GetSelection();
 
         mainframe->SetupStatusPanel(1);
         status_panel->Refresh();
-
-        if(!wxDirExists(data_dir))
-        {
-            if(wxMessageBox(_T("Create directory '") + data_dir + _T("' ?"), _T("Setup"), wxYES_NO, this) != wxYES)
-            {
-                return;
-            }
-            wxMkdir(data_dir);
-        }
 
 //        CalcSun(graph_date_ymd);  // done in OpenLogFiles()
 //        graph_panel->Refresh();  // done in OpenLogFiles()
@@ -190,45 +203,51 @@ double string_to_degrees(wxString string)
 }
 
 DlgLocation::DlgLocation(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Location"), wxDefaultPosition, wxSize(320,280+DLG_HX))
+    : wxDialog(parent, -1, _T("Location"))
 {//======================================
-    int y;
-    int x;
     int ix;
-    x = 110;
-    y = 22;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(2, DLG_GAP, 2*DLG_GAP);
+    wxFlexGridSizer *panels = new wxFlexGridSizer(1 + N_PANEL_GROUPS, DLG_GAP, 2*DLG_GAP);
+    wxBoxSizer *timezone = new wxBoxSizer(wxHORIZONTAL);
 
-    new wxStaticText(this, -1, _T("Longitude"), wxPoint(8, y+3));
-    new wxStaticText(this, -1, _T("Latitude"), wxPoint(8, y+25));
-    new wxStaticText(this, -1, _T("Time Zone (hrs E)"), wxPoint(8, y+47));
-    t_longitude = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y), wxSize(90, 20));
-    t_latitude = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y+22), wxSize(90, 20));
-    t_timezone = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y+44), wxSize(90, 20));
-#ifdef __WXMSW__
-    t_tz_auto = new wxCheckBox(this, -1, _T("auto"), wxPoint(x+92, y+46));
-#else
-    t_tz_auto = new wxCheckBox(this, -1, _T("auto"), wxPoint(x+90, y+41));
-#endif
+    t_longitude = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(110, -1));
+    t_latitude = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(110, -1));
+    t_timezone = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(110, -1));
+    t_tz_auto = new wxCheckBox(this, -1, _T("auto"));
 
-    y = 104;
-    new wxStaticText(this, -1, _T("Panel Group"), wxPoint(8, y));
-    new wxStaticText(this, -1, _T("Tilt"), wxPoint(8, y+20));
-    new wxStaticText(this, -1, _T("Facing CW from N"), wxPoint(8, y+40));
+    timezone->Add(t_timezone);
+    timezone->Add(t_tz_auto, 0, wxLEFT | wxALIGN_CENTER_VERTICAL, DLG_GAP);
 
-    x = 120;
+    AddGridLabel(this, grid, _T("Longitude"));
+    grid->Add(t_longitude);
+    AddGridLabel(this, grid, _T("Latitude"));
+    grid->Add(t_latitude);
+    AddGridLabel(this, grid, _T("Time Zone (hrs E)"));
+    grid->Add(timezone);
+
+    AddGridLabel(this, panels, _T("Panel Group"));
     for(ix=0; ix<N_PANEL_GROUPS; ix++)
     {
-        new wxStaticText(this, -1, wxString(wxChar('A' + ix)), wxPoint(x+20, y));
-        t_tilt[ix] = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y+18), wxSize(50, 20), wxTE_CENTRE);
-        t_facing[ix] = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y+38), wxSize(50, 20), wxTE_CENTRE);
-        x += 50;
+        t_tilt[ix] = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(70, -1), wxTE_CENTRE);
+        t_facing[ix] = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(70, -1), wxTE_CENTRE);
+        panels->Add(new wxStaticText(this, -1, wxString(wxChar('A' + ix))), 0, wxALIGN_CENTER);
     }
+    AddGridLabel(this, panels, _T("Tilt"));
+    for(ix=0; ix<N_PANEL_GROUPS; ix++)
+        panels->Add(t_tilt[ix]);
+    AddGridLabel(this, panels, _T("Facing CW from N"));
+    for(ix=0; ix<N_PANEL_GROUPS; ix++)
+        panels->Add(t_facing[ix]);
 
-    y = 240;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(130,y));
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(220,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
 
+    top->Add(grid, 0, wxALL, DLG_BORDER);
+    top->Add(panels, 1, wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 }
 
 void DlgLocation::ShowDlg()
@@ -317,29 +336,47 @@ BEGIN_EVENT_TABLE(DlgInverter, wxDialog)
 END_EVENT_TABLE()
 
 
-static wxString inverter_retrieve_choices[] = {
-    _T("no"), _T("5 minute data"), _T("10 second data") };
+#define N_SYNC_CHOICES  5
+static wxString sync_choices[N_SYNC_CHOICES] = {
+    _T("Never"), _T("Every hour"), _T("Every 6 hours"), _T("Every day"), _T("Every week") };
+static const int sync_seconds[N_SYNC_CHOICES] = {0, 3600, 6*3600, 24*3600, 7*24*3600};
 
 
 DlgInverter::DlgInverter(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Inverter Settings"), wxDefaultPosition, wxSize(324,200+DLG_HX))
+    : wxDialog(parent, -1, _T("Inverter Settings"))
 {//=================================
-    int y;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
 
-    y = 24;
-    t_retrieve = new wxCheckBox(this, -1, _T("Auto retrieve 5 minute energy data"), wxPoint(8, y));
+    t_retrieve = new wxCheckBox(this, -1, _T("Auto retrieve 5 minute energy data"));
+    t_set_time = new wxChoice(this, -1, wxDefaultPosition, wxDefaultSize, N_SYNC_CHOICES, sync_choices);
 
-    y = 160;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(134,y));
+    wxBoxSizer *sync_row = new wxBoxSizer(wxHORIZONTAL);
+    sync_row->Add(new wxStaticText(this, -1, _T("Sync inverter clock to computer time")), 0, wxALIGN_CENTER_VERTICAL);
+    sync_row->Add(t_set_time, 0, wxLEFT, DLG_GAP);
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(224,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
 
+    top->Add(t_retrieve, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, DLG_BORDER);
+    top->Add(sync_row, 0, wxLEFT | wxRIGHT | wxTOP, DLG_BORDER);
+    top->Add(new wxStaticText(this, -1, _T("It also syncs when daylight saving starts or ends, unless this is set to Never.")),
+             1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 }
 
 void DlgInverter::ShowDlg(int inv)
 {//===============================
     inverter = inv;
     t_retrieve->SetValue(inverters[inv].auto_retrieve);
+    // the nearest choice, the config file may have another value
+    int sync = 0;
+    for(int ix=0; ix<N_SYNC_CHOICES; ix++)
+    {
+        if(inverters[inv].auto_set_time >= sync_seconds[ix])
+            sync = ix;
+    }
+    t_set_time->SetSelection(sync);
     ShowModal();
 }
 
@@ -352,6 +389,14 @@ void DlgInverter::OnButton(wxCommandEvent &event)
     if(id == dlgOK)
     {
         inverters[inverter].auto_retrieve = t_retrieve->GetValue();
+        int sync_interval = sync_seconds[t_set_time->GetSelection()];
+        if(sync_interval != inverters[inverter].auto_set_time)
+        {
+            // check the clock as soon as the option is changed
+            inverters[inverter].last_clock_check = 0;
+        }
+        inverters[inverter].auto_set_time = sync_interval;
+        ConfigSave(1);
     }
     Show(false);
 }
@@ -375,24 +420,30 @@ double histogram_max;
 int histogram_flags;
 
 DlgHistogram::DlgHistogram(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Energy Histogram"), wxDefaultPosition, wxSize(324,200+DLG_HX))
+    : wxDialog(parent, -1, _T("Energy Histogram"))
 {//=================================
-    int y;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(2, DLG_GAP, 2*DLG_GAP);
+    wxBoxSizer *daily = new wxBoxSizer(wxHORIZONTAL);
 
-    y = 24;
-    new wxStaticText(this, -1, _T("Maximum daily energy"), wxPoint(10, y));
-    t_dailymax = new wxTextCtrl(this, -1, data_dir, wxPoint(136, y-3), wxSize(46, 20));
-    new wxStaticText(this, -1, _T("kW"), wxPoint(184, y));
+    t_dailymax = new wxTextCtrl(this, -1, data_dir, wxDefaultPosition, wxSize(80, -1));
+    t_back_colour = new wxChoice(this, idBackColour, wxDefaultPosition, wxDefaultSize, N_BACK_COLOURS, BackColours);
 
-    y = 52;
-    new wxStaticText(this, -1, _T("Background"), wxPoint(10, y+3));
-    t_back_colour = new wxChoice(this, idBackColour, wxPoint(136, y-1), wxDefaultSize, N_BACK_COLOURS, BackColours);
+    daily->Add(t_dailymax);
+    daily->Add(new wxStaticText(this, -1, _T("kW")), 0, wxLEFT | wxALIGN_CENTER_VERTICAL, DLG_GAP);
 
-    y = 160;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(134,y));
+    AddGridLabel(this, grid, _T("Maximum daily energy"));
+    grid->Add(daily);
+    AddGridLabel(this, grid, _T("Background"));
+    grid->Add(t_back_colour);
+
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(224,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
 
+    top->Add(grid, 1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 }
 
 void DlgHistogram::ShowDlg()
@@ -438,26 +489,26 @@ wxProgressDialog *progress_retrieval = NULL;
 
 
 DlgRetrieveEnergy::DlgRetrieveEnergy(wxWindow *parent)
-    : wxDialog(parent, -1, wxEmptyString, wxDefaultPosition, wxSize(470,200+DLG_HX))
+    : wxDialog(parent, -1, wxEmptyString)
 {//=================================
-    int y;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
 
     MakeInverterNames(1);
 
-    y = 12;
-    t_title = new wxStaticText(this, -1, wxEmptyString, wxPoint(10, y));
+    t_title = new wxStaticText(this, -1, _T("Retrieve 10 second energy data"));
+    t_path = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(460, -1));
+    t_option1 = new wxCheckBox(this, -1, _T("5 minute data for PVOutput.org "));
 
-    y = 46;
-    new wxStaticText(this, -1, _T("Write to"), wxPoint(10, y));
-    t_path = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(5, y+16), wxSize(464, 20));
-
-    y = 90;
-    t_option1 = new wxCheckBox(this, -1, _T("5 minute data for PVOutput.org "), wxPoint(10, y));
-
-    y = 160;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(280,y));
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(370,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
+
+    top->Add(t_title, 0, wxALL, DLG_BORDER);
+    top->Add(new wxStaticText(this, -1, _T("Write to")), 0, wxLEFT | wxRIGHT, DLG_BORDER);
+    top->Add(t_path, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, DLG_BORDER/2);
+    top->Add(t_option1, 1, wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 
     option_verbose = 0;
     option_pvoutput = 0;
@@ -512,6 +563,7 @@ void DlgRetrieveEnergy::ShowDlg(int inv, int type)
 
     t_path->ChangeValue(path + fname + date_ymd_string + _T(".txt"));
 
+    Layout();   // the labels may have changed
     ShowModal();
 }
 
@@ -525,7 +577,7 @@ void DlgRetrieveEnergy::OnButton(wxCommandEvent &event)
         path = wxFileName(t_path->GetValue()).GetPath();
         if(wxDirExists(path) == false)
         {
-            wxLogError(_T("Directory not found:\n") + path);
+            wxLogError(_T("Directory not found:\n%s"), path);
             return;
         }
         path_retrieve = path;
@@ -577,29 +629,43 @@ PVOUTPUT pvoutput;
 wxString pvoutput_choices[4] = {_T("Off"), _T("5 minutes"), _T("10 minutes"), _T("15 minutes")};
 
 DlgPvoutput::DlgPvoutput(wxWindow *parent)
-    : wxDialog(parent, -1, _T("PVOutput.org"), wxDefaultPosition, wxSize(470,220+DLG_HX))
+    : wxDialog(parent, -1, _T("PVOutput.org"))
 {//=================================
-    int y = 20;
-    int x = 70;
-    t_url = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y), wxSize(350, 20));
-    t_system_id = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y+26), wxSize(80, 20));
-    t_api_key = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y+52), wxSize(350, 20));
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(2, DLG_GAP, 2*DLG_GAP);
+    wxBoxSizer *options = new wxBoxSizer(wxVERTICAL);
 
-    new wxStaticText(this, -1, _T("URL"), wxPoint(8, y+2));
-    new wxStaticText(this, -1, _T("System Id"), wxPoint(8, y+28));
-    new wxStaticText(this, -1, _T("API Key"), wxPoint(8, y+54));
+    t_url = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(380, -1));
+    t_system_id = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(110, -1));
+    t_api_key = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(380, -1));
+    t_live_updates = new wxChoice(this, -1, wxDefaultPosition, wxDefaultSize, 4, pvoutput_choices);
+    t_instantaneous = new wxCheckBox(this, -1, _T("Include Instantaneous Power"));
+    t_grid_voltage = new wxCheckBox(this, -1, _T("Include Grid Voltage"));
+    t_temperature = new wxCheckBox(this, -1, _T("Include Inverter Temperature"));
 
-    y += 86;
-    t_live_updates = new wxChoice(this, -1, wxPoint(84, y), wxDefaultSize, 4, pvoutput_choices);
-    new wxStaticText(this, -1, _T("Live updates"), wxPoint(8, y+4));
-    t_instantaneous = new wxCheckBox(this, -1, _T("Include Instantaneous Power"), wxPoint(200, y-2));
-    t_grid_voltage = new wxCheckBox(this, -1, _T("Include Grid Voltage"), wxPoint(200, y+18));
-    t_temperature = new wxCheckBox(this, -1, _T("Include Inverter Temperature"), wxPoint(200, y+38));
+    options->Add(t_instantaneous);
+    options->Add(t_grid_voltage, 0, wxTOP, DLG_GAP/2);
+    options->Add(t_temperature, 0, wxTOP, DLG_GAP/2);
 
-    y = 180;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(280,y));
+    grid->AddGrowableCol(1);
+    AddGridLabel(this, grid, _T("URL"));
+    grid->Add(t_url, 0, wxEXPAND);
+    AddGridLabel(this, grid, _T("System Id"));
+    grid->Add(t_system_id);
+    AddGridLabel(this, grid, _T("API Key"));
+    grid->Add(t_api_key, 0, wxEXPAND);
+    AddGridLabel(this, grid, _T("Live updates"));
+    grid->Add(t_live_updates);
+    grid->AddSpacer(1);
+    grid->Add(options);
+
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(370,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
+
+    top->Add(grid, 1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 }
 
 
@@ -656,36 +722,47 @@ END_EVENT_TABLE()
 
 
 DlgSetTime::DlgSetTime(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Set Time"), wxDefaultPosition, wxSize(470,220+DLG_HX))
+    : wxDialog(parent, -1, _T("Set Time"))
 {//=================================
-    int y = 20;
-    int x = 106;
-
     static wxString radio_names[2] = {_T("Set to specified time "), _T("Set to computer time ")};
 
-    new wxStaticText(this, -1, _T("Computer time"), wxPoint(10, y));
-    t_computer_date = new wxStaticText(this, -1, wxEmptyString, wxPoint(x+8, y));
-    t_computer_time = new wxStaticText(this, -1, wxEmptyString, wxPoint(x+98, y));
-    y += 24;
-    new wxStaticText(this, -1, _T("Inverter time"), wxPoint(10, y));
-    t_inverter_date = new wxStaticText(this, -1, wxEmptyString, wxPoint(x+8, y));
-    t_inverter_time = new wxStaticText(this, -1, wxEmptyString, wxPoint(x+98, y));
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *times = new wxFlexGridSizer(3, DLG_GAP, 2*DLG_GAP);
+    wxFlexGridSizer *new_time = new wxFlexGridSizer(2, DLG_GAP, 2*DLG_GAP);
+    const wxSize date_size(GetTextExtent(_T("No response ")).GetWidth() + 8, -1);
 
-    y += 20;
-    t_radiobox = new wxRadioBox(this, -1, wxEmptyString, wxPoint(10, y), wxSize(350, -1), 2, radio_names);
+    t_computer_date = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, date_size);
+    t_computer_time = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, date_size);
+    t_inverter_date = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, date_size);
+    t_inverter_time = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, date_size);
 
-    y += 16;
-    x = 180;
-    t_new_date = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x, y), wxSize(90, 20));
-    t_new_time = new wxTextCtrl(this, -1, wxEmptyString, wxPoint(x+90, y), wxSize(70, 20));
+    AddGridLabel(this, times, _T("Computer time"));
+    times->Add(t_computer_date);
+    times->Add(t_computer_time);
+    AddGridLabel(this, times, _T("Inverter time"));
+    times->Add(t_inverter_date);
+    times->Add(t_inverter_time);
 
-    y = 180;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(280,y));
+    t_radiobox = new wxRadioBox(this, -1, wxEmptyString, wxDefaultPosition, wxDefaultSize, 2, radio_names, 1, wxRA_SPECIFY_COLS);
+    t_new_date = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(130, -1));
+    t_new_time = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(130, -1));
+
+    AddGridLabel(this, new_time, _T("Specified date"));
+    new_time->Add(t_new_date);
+    AddGridLabel(this, new_time, _T("Specified time"));
+    new_time->Add(t_new_time);
+
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(370,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
+
+    top->Add(times, 0, wxALL, DLG_BORDER);
+    top->Add(t_radiobox, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    top->Add(new_time, 1, wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 
     settime_timer.SetOwner(this->GetEventHandler(), idSetTimeTimer);
-
 }
 
 
@@ -695,6 +772,8 @@ void DlgSetTime::OnTimer(wxTimerEvent& WXUNUSED(event))
     wxDateTime datetime;
     time_t computer_time;
     time_t inverter_time;
+    const int need_time_offset = inverters[inverter].shown_need_time_offset;
+    const int time_offset = inverters[inverter].shown_time_offset;
 
     if(this->IsShown() == false)
     {
@@ -708,17 +787,17 @@ void DlgSetTime::OnTimer(wxTimerEvent& WXUNUSED(event))
     if(t_new_date->GetValue() == wxEmptyString)
         t_new_date->ChangeValue(datetime.FormatISODate());
 
-    if(inverters[inverter].need_time_offset != 0)
+    if(need_time_offset != 0)
     {
         t_inverter_time->SetLabel(wxEmptyString);
-        if(inverters[inverter].need_time_offset < 0)
+        if(need_time_offset < 0)
             t_inverter_date->SetLabel(_T("No response"));
         else
             t_inverter_date->SetLabel(_T("Waiting..."));
     }
     else
     {
-        inverter_time = computer_time + inverters[inverter].time_offset;
+        inverter_time = computer_time + time_offset;
         datetime.Set(inverter_time);
         t_inverter_date->SetLabel(datetime.FormatISODate());
         t_inverter_time->SetLabel(datetime.FormatISOTime());
@@ -731,10 +810,15 @@ void DlgSetTime::ShowDlg(int inv)
     wxTimerEvent null_event;
 
     inverter = inv;
+    inverters[inv].shown_need_time_offset = 2;
     OnTimer(null_event);
     settime_timer.Start(250, wxTIMER_CONTINUOUS);
     QueueCommand(inv, cmdGetInvTime);
-    inverters[inv].need_time_offset = 2;  // pending
+    {
+        wxMutexLocker lock(comms_mutex);
+        inverters[inv].need_time_offset = 2;  // pending
+    }
+    inverters[inv].shown_need_time_offset = 2;
     ShowModal();
 }
 
@@ -754,6 +838,7 @@ void DlgSetTime::OnButton(wxCommandEvent &event)
         if(action == 0)
         {
             memset(&btime, 0, sizeof(btime));
+            btime.tm_isdst = -1;   // mktime() finds whether daylight saving applies on this date
             strncpy0(buf, t_new_date->GetValue().mb_str(wxConvLocal), sizeof(buf));
             n1 = sscanf(buf, "%d-%d-%d", &year, &month, &btime.tm_mday);
             btime.tm_year = year-1900;

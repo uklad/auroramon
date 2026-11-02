@@ -1,0 +1,16 @@
+# Build output
+src/*.o
+src/*.d
+src/auroramon
+
+# Built programs and their bundled libraries
+linux_32bit/
+linux_64bit/
+linux_64bit_*/
+
+# Backup of the 1.07 source, which is the first commit in this repository
+src-1.07-original.tar.gz
+
+# Editors and Python
+*~
+__pycache__/

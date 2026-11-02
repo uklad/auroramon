@@ -46,7 +46,6 @@
 
 int energy_today_adjust = 0;   // use if the inverter starts with a spurious non-zero energy-today value
 
-int big_endian = 0;
 int SerialBlocking = 2;             // x10mS serial port timeout for read (Linux)
 int max_send_attempts = 3;
 #ifdef __WXMSW__
@@ -64,6 +63,9 @@ static int comms_inverter = 0;
 #define N_SERIALBUF 11
 static char SerialBuf[N_SERIALBUF];
 static const char *SerialBufSpaces = "          ";   // fill SerialBuf with 10 speaces and /0
+
+wxMutex comms_mutex;
+static bool comms_shutdown = false;   // guarded by comms_mutex
 
 int command_inverter = 0;
 int command_type = 0;
@@ -167,7 +169,7 @@ int QueueCommand(int inv, int type)
     if(message != wxEmptyString)
     {
         if(inverter_address[1] != 0)
-            LogMessage(wxString::Format(_T("Inverter %d: %s"), message.c_str()), 1);
+            LogMessage(wxString::Format(_T("Inverter %d: %s"), inverter_address[inv], message.c_str()), 1);
         else
             LogMessage(message, 1);
     }
@@ -222,7 +224,7 @@ int SerialOpen()
 {//=============
     // Windows
 	int err =0;
-    char dev_name[30];
+    char dev_name[256];
     DCB dcbSerialParams = {0};
     COMMTIMEOUTS timeouts = {0};
 
@@ -357,7 +359,8 @@ int SerialOpen()
 {//==============
     // Linux
     int result;
-    char dev_name[20];
+    int flags;
+    char dev_name[256];
 	struct stat statbuf;
 
     strncpy0(dev_name, serial_port.mb_str(wxConvLocal), sizeof(dev_name));
@@ -381,7 +384,8 @@ int SerialOpen()
 	}
 
     // open the serial port
-    if((fd_serial = open(dev_name, O_RDWR | O_NOCTTY )) < 0)
+    // non-blocking, because open() can wait forever for a carrier signal until CLOCAL has been set
+    if((fd_serial = open(dev_name, O_RDWR | O_NOCTTY | O_NONBLOCK)) < 0)
     {
         // failed to open serial port device
         return(-2);
@@ -392,6 +396,14 @@ int SerialOpen()
         close(fd_serial);
         fd_serial = -1;
         return(result);
+    }
+
+    // reads rely on the VTIME timeout, which needs a blocking descriptor
+    if(((flags = fcntl(fd_serial, F_GETFL)) == -1) || (fcntl(fd_serial, F_SETFL, flags & ~O_NONBLOCK) == -1))
+    {
+        close(fd_serial);
+        fd_serial = -1;
+        return(-7);
     }
 
     return(0);
@@ -545,7 +557,7 @@ int Communicate(int check_state)
         if((inverters[comms_inverter].fails > 3) && (inverters[comms_inverter ^ 1].alive == 0))
         {
             // The other inverter is also not alive. Reduce the polling rate.
-            inverter_thread->Sleep(300);
+            wxThread::Sleep(300);
             max_attempts = 2;
         }
     }
@@ -578,7 +590,10 @@ int Communicate(int check_state)
         {
             result = 1;
         }
-        nchars = write(fd_serial, SerialBuf, 10);   // should we repeat until all chars have been sent?
+        {
+            ssize_t n_written = write(fd_serial, SerialBuf, 10);   // should we repeat until all chars have been sent?
+            nchars = (n_written < 0) ? 0 : n_written;
+        }
         if(tcdrain(fd_serial) != 0)
         {
             result = 2;
@@ -587,7 +602,7 @@ int Communicate(int check_state)
 
         if(nchars != 10)
         {
-LogCommMsg(wxString::Format(_T("%d  Only written %d chars"), attempts, nchars));
+LogCommMsg(wxString::Format(_T("%d  Only written %d chars"), attempts, (int)nchars));
             if(nchars <= 0)
                 continue;   // we havent sent anything, so no point in looking for a reply
         }
@@ -602,7 +617,7 @@ LogCommMsg(wxString::Format(_T("%d  Only written %d chars"), attempts, nchars));
             if(((unsigned char)SerialBuf[6] != (crcValue & 0xff)) || ((unsigned char)SerialBuf[7] != ((crcValue >> 8) & 0xff)))
             {
                 // crc error
-LogCommMsg(wxString::Format(_T("%d  CRC error, nchars %d opcode %2d %2d"), attempts, result, SerialBufSave[1], SerialBufSave[2]));
+LogCommMsg(wxString::Format(_T("%d  CRC error, nchars %d opcode %2d %2d"), attempts, result, (int)SerialBufSave[1], (int)SerialBufSave[2]));
             }
             else
             {
@@ -612,7 +627,7 @@ LogCommMsg(wxString::Format(_T("%d  CRC error, nchars %d opcode %2d %2d"), attem
         else
         if(result == 0)
         {
-            inverter_thread->Sleep(100);  // thread sleep
+            wxThread::Sleep(100);  // thread sleep
 if(attempts >= max_attempts)
 LogCommMsg(wxString::Format(_T("%d  Wait %d timeout - fail"), attempts, max_read_attempts+1));
 else
@@ -640,7 +655,7 @@ LogCommMsg(_T("CRC error, failed\n"));
         if(transmission_state_error != 0x20)
         {
             // 0x20 is the space character we put into SerialBuf[0], unchanged
-LogCommMsg(wxString::Format(_T("Transmission state error %d  buf[0]=%d cmd=%d\n"), transmission_state_error, SerialBuf[0], SerialBufSave[1]));
+LogCommMsg(wxString::Format(_T("Transmission state error %d  buf[0]=%d cmd=%d\n"), transmission_state_error, (int)SerialBuf[0], (int)SerialBufSave[1]));
         }
         result = -2;
     }
@@ -659,75 +674,31 @@ LogCommMsg(wxString::Format(_T("Transmission state error %d  buf[0]=%d cmd=%d\n"
 }
 
 
+// The inverter sends values most significant byte first.  These work on any host.
+
 unsigned long ConvertLong(char *buf)
 {//=================================
-    unsigned long *p;
-    unsigned char buf2[4];
-
-    if(big_endian)
-    {
-        buf2[0] = buf[0];
-        buf2[1] = buf[1];
-        buf2[2] = buf[2];
-        buf2[3] = buf[3];
-    }
-    else
-    {
-        buf2[0] = buf[3];
-        buf2[1] = buf[2];
-        buf2[2] = buf[1];
-        buf2[3] = buf[0];
-    }
-
-    p = (unsigned long *)buf2;
-    return(*p & 0xffffffff);
+    const unsigned char *p = (const unsigned char *)buf;
+    return(((unsigned long)p[0] << 24) | ((unsigned long)p[1] << 16) | ((unsigned long)p[2] << 8) | p[3]);
 }
 
 
 unsigned short ConvertShort(char *buf)
 {//=================================
-    unsigned short *p;
-    unsigned char buf2[4];
-
-    if(big_endian)
-    {
-        buf2[0] = buf[0];
-        buf2[1] = buf[1];
-    }
-    else
-    {
-        buf2[0] = buf[1];
-        buf2[1] = buf[0];
-    }
-
-    p = (unsigned short *)buf2;
-    return(*p);
+    const unsigned char *p = (const unsigned char *)buf;
+    return((unsigned short)((p[0] << 8) | p[1]));
 }
 
 
 
 float ConvertFloat(char *buf)
 {//==========================
-    float *p;
-    unsigned char buf2[4];
+    float value;
+    wxUint32 bits = (wxUint32)ConvertLong(buf);
 
-    if(big_endian)
-    {
-        buf2[0] = buf[0];
-        buf2[1] = buf[1];
-        buf2[2] = buf[2];
-        buf2[3] = buf[3];
-    }
-    else
-    {
-        buf2[0] = buf[3];
-        buf2[1] = buf[2];
-        buf2[2] = buf[1];
-        buf2[3] = buf[0];
-    }
-
-    p = (float *)buf2;
-    return(*p);
+    wxCOMPILE_TIME_ASSERT(sizeof(value) == sizeof(bits), FloatMustBe32Bits);
+    memcpy(&value, &bits, sizeof(value));
+    return(value);
 }
 
 
@@ -1077,13 +1048,17 @@ int SetInverterTime(int addr, int offset)
 {//========================================
     time_t computer_time;
     time_t inverter_time;
+    time_t new_time;
     int diff;
 
 LogCommMsg(_T("Get time"));
     computer_time = time(NULL);
 
-    inverter_time = computer_time + offset - (time_t)TimeBase;
-    inverter_time += GetGmtOffset(0);
+    // The inverter's clock shows local time, it knows nothing about time zones.
+    // Use the UTC offset at the time we're setting, it may be a date with different daylight saving.
+    new_time = computer_time + offset;
+    inverter_time = new_time - (time_t)TimeBase;
+    inverter_time += GetGmtOffset(new_time);
 
     inverter_time++;   // add 1 second for latency
 
@@ -1105,8 +1080,11 @@ LogCommMsg(_T("set time failed"));
     }
 LogCommMsg(_T("set time done"));
 
-    GetInverterTime(addr, NULL, &diff);
+    if(GetInverterTime(addr, NULL, &diff) == 0)
+    {
 LogCommMsg(wxString::Format(_T("difference is now %d"), diff));
+        inverters[comms_inverter].time_offset = diff;
+    }
     return(0);
 }
 
@@ -1237,18 +1215,22 @@ void Energy10Sec_Finish()
     f_out = fopen(retrieving_fname.mb_str(wxConvLocal), "w");
     if(f_out == NULL)
     {
-        wxLogError(_T("Can't write to file: ") + retrieving_fname);
+        wxLogError(_T("Can't write to file: %s"), retrieving_fname);
         return;
     }
 
     fname = data_dir  + _T("/system/energy_10sec");
-    wxRemoveFile(fname);
+    if(wxFileExists(fname))
+        wxRemoveFile(fname);
     f_10sec = fopen(fname.mb_str(wxConvLocal), "w");
 
     for(ix=0; ix < CE_count; ix++)
     {
         if(CE_data[ix] == 0xffff)
         {
+            if((ix + 2) >= CE_count)
+                break;   // the time entries weren't retrieved
+
             // time follows in the next 2 entries
             timeval = (CE_data[ix+1] << 16) + CE_data[ix+2];
             timeval += TimeBase;
@@ -1397,6 +1379,8 @@ int Energy10Sec_Start(int inv)
     CE_start = ConvertShort(&SerialBuf[2]);
 
     CE_data = (unsigned short *)realloc(CE_data, (TENSEC_MAX+1) * sizeof(unsigned short));
+    if(CE_data == NULL)
+        return(-1);
     CE_next = CE_start;
     CE_count = 0;
     retrieving_data = RETRIEVE_10SEC;
@@ -1433,7 +1417,7 @@ void EnergyDaily_Finish()
     f_out = fopen(retrieving_fname.mb_str(wxConvLocal), "w");
     if(f_out == NULL)
     {
-        wxLogError(_T("Can't write to file: ") + retrieving_fname);
+        wxLogError(_T("Can't write to file: %s"), retrieving_fname);
         return;
     }
 
@@ -1496,7 +1480,8 @@ void EnergyDaily_Finish()
 
     // write a list of dates and energies in ascending order (excluding today)
     fname = data_dir  + _T("/system/energy_daily");
-    wxRemoveFile(fname);
+    if(wxFileExists(fname))
+        wxRemoveFile(fname);
     f_daily = fopen(fname.mb_str(wxConvLocal), "w");
 
     if(f_daily != NULL)
@@ -1569,6 +1554,7 @@ int EnergyDaily_Start(int inv)
 {//===========================
     retrieving_inv = inv;
     CE_inv_addr = inverter_address[inv];
+    CE_inv = inv;
 
     // find the start address in the memory, for todays value
     strcpy(SerialBuf, SerialBufSpaces);
@@ -1580,6 +1566,8 @@ int EnergyDaily_Start(int inv)
     CE_verbose = dlg_retrieve_energy->option_verbose;
 
     CE_data = (unsigned short *)realloc(CE_data, (DAILY_NDAYS*2) * sizeof(unsigned short));
+    if(CE_data == NULL)
+        return(-1);
     CE_next = DAILY_BASE;
     CE_count = 0;
     retrieving_data = RETRIEVE_DAILY;
@@ -1673,7 +1661,7 @@ int GetInverterData(int inv, int type)
 
     case 5:
         GetState(addr);
-        inverter_thread->Sleep(200);
+        wxThread::Sleep(200);
         ir->flags = IR_HAS_STATE;
         break;
 
@@ -1824,7 +1812,7 @@ void UpdatePowerData(wxString fname10sec)
     char date[20];
     char year[5];
     char timestr[12];
-    char fname[200];
+    char fname[1024];
     char current_date[20];
     char buf[80];
     char periods[N_10SEC];
@@ -1846,7 +1834,7 @@ void UpdatePowerData(wxString fname10sec)
     // read the 10-second retrieved energy
     while(fgets(buf, sizeof(buf), f_10sec) != NULL)
     {
-        if(sscanf(buf, "%s%d:%d:%d %f", date, &hour, &min, &sec, &power) != 5)
+        if(sscanf(buf, "%19s%d:%d:%d %f", date, &hour, &min, &sec, &power) != 5)
             continue;
 
         if(strcmp(date, current_date) != 0)
@@ -1859,9 +1847,7 @@ void UpdatePowerData(wxString fname10sec)
             memcpy(year, date, 4);
             year[4] = 0;
 
- // NOTE: sprintf(fname, "%ls", data_dir.c_str()) doesn't work on Windows
-            strcpy(fname, data_dir.mb_str(wxConvLocal));
-            sprintf(&fname[strlen(fname)], "/%s/d%d_%s.txt", year, CE_inv_addr, date);
+            snprintf(fname, sizeof(fname), "%s/%s/d%d_%s.txt", (const char *)data_dir.mb_str(wxConvLocal), year, CE_inv_addr, date);
 
             memset(periods, 0, sizeof(periods));
             if((f_in = fopen(fname, "r")) != NULL)
@@ -1870,8 +1856,9 @@ void UpdatePowerData(wxString fname10sec)
                 {
                     if(sscanf(timestr, "%d:%d:%d", &t_hour, &t_min, &t_sec) == 3)
                     {
-                        period = t_hour*360 + t_min*6 + t_sec/10;
-                        periods[period] = 1;
+                        period = TimeToPeriod(t_hour, t_min, t_sec);
+                        if(period >= 0)
+                            periods[period] = 1;
                     }
                 }
                 fclose(f_in);
@@ -1887,8 +1874,8 @@ void UpdatePowerData(wxString fname10sec)
             }
         }
 
-        period = hour*360 + min*6 + sec/10;
-        if(periods[period] == 0)
+        period = TimeToPeriod(hour, min, sec);
+        if((period >= 0) && (periods[period] == 0))
         {
             // there was no original data for this period, but we have retrieved data
             periods[period] = 2;
@@ -1911,9 +1898,20 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
     wxString fname;
     static int next_command[N_INV] = {0, 0};
 
+    // The inverter thread has finished this poll and the next hasn't started, so
+    // this is when the GUI can read what that thread wrote.
+    for(int ix=0; ix<N_INV; ix++)
+    {
+        inverters[ix].shown_time_offset = inverters[ix].time_offset;
+        inverters[ix].shown_need_time_offset = inverters[ix].need_time_offset;
+    }
+
     if(retrieving_finished != 0)
     {
-        LogMessage(wxString::Format(_T("Retrieve %s complete"), retrieve_message.c_str()), 1);
+        if(retrieving_finished == 1)
+            LogMessage(wxString::Format(_T("Retrieve %s complete"), retrieve_message.c_str()), 1);
+        else
+            LogMessage(wxString::Format(_T("Retrieve %s failed"), retrieve_message.c_str()), 1);
 
         fname = data_dir + _T("/system/energy_10sec");
         if(wxFileExists(fname))
@@ -1955,7 +1953,7 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
     {
         if(retrieving_data != 0)
         {
-            LogMessage(wxString::Format(_T("Retrieving %s %2d%%%%"), retrieve_message.c_str(), retrieving_progress), 0);
+            LogMessage(wxString::Format(_T("Retrieving %s %2d%%"), retrieve_message.c_str(), retrieving_progress), 0);
         }
         else
         if(retrieving_finished != 0)
@@ -1989,6 +1987,15 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
             wxLogError(wxString::Format(_T("No response from inverter #%d"), inverter_address[command_inverter]));
         }
         break;
+    }
+
+    if(command_type == cmdAutoSetInvTime)
+    {
+        // no message box, this can run unattended
+        if(data_ok == 1)
+            LogMessage(wxString::Format(_T("Inverter #%d: clock set to computer time"), inverter_address[command_inverter]), 1);
+        else
+            LogMessage(wxString::Format(_T("Inverter #%d: failed to set the clock"), inverter_address[command_inverter]), 1);
     }
 
     if(command_type == cmdInverterInfo)
@@ -2067,11 +2074,11 @@ void SendCommand(int inv, int type)
     command_inverter = inv;
 //return;  // TESTING
 //wxLogStatus(wxString::Format(_T("SendCommand %d  %d  live=%d"), inv, type, inverters[0].alive));
-    if((serial_port_error != 0) && (serial_port[0] != 0))
+    if((serial_port_error != 0) && !serial_port.empty())
     {
         if(serial_port_error == -1)
         {
-            LogMessage(wxString::Format(_T("Can't find serial port: "), serial_port_error) + serial_port, 0);
+            LogMessage(_T("Can't find serial port: ") + serial_port, 0);
         }
         else
         if(serial_port_error == -2)
@@ -2080,18 +2087,35 @@ void SendCommand(int inv, int type)
         }
    }
 
+    // Each poll is started when the previous one reports back, so if we fail
+    // here then polling would stop for good.  Try this command again later.
     inverter_thread = new InverterThread();
     error = inverter_thread->Create();
-    if(error != wxTHREAD_NO_ERROR)
-    {
-		LogMessage(_T("Failed to create inverter thread"), 1);
-    }
-    error = inverter_thread->Run();
-    if(error != wxTHREAD_NO_ERROR)
-    {
-        LogMessage(_T("Failed to run inverter thread"), 1);
-    }
+    if(error == wxTHREAD_NO_ERROR)
+        error = inverter_thread->Run();
 
+    if(error != wxTHREAD_NO_ERROR)
+    {
+        LogMessage(_T("Failed to start inverter thread, will retry"), 1);
+        delete inverter_thread;   // it never ran, so it won't delete itself
+        inverter_thread = NULL;
+        mainframe->retry_command_timer.Start(2000, wxTIMER_ONE_SHOT);
+    }
+}
+
+
+void Mainframe::OnRetryCommandTimer(wxTimerEvent& WXUNUSED(event))
+{//===============================================================
+    SendCommand(command_inverter, command_type);
+}
+
+
+void CommsShutdown()
+{//=================
+    // Wait for any poll in progress.  A thread which starts after this does nothing.
+    wxMutexLocker lock(comms_mutex);
+    comms_shutdown = true;
+    SerialClose();
 }
 
 
@@ -2101,6 +2125,10 @@ void *InverterThread::Entry()
     int addr;
     int type;
     int result;
+    wxMutexLocker lock(comms_mutex);
+
+    if(comms_shutdown)
+        return(NULL);
 
     result = SerialOpen();
     serial_port_error = result;
@@ -2153,6 +2181,10 @@ void *InverterThread::Entry()
 
         case cmdSetInvTime2:
             result = SetInverterTime(addr, settime_offset);
+            break;
+
+        case cmdAutoSetInvTime:
+            result = SetInverterTime(addr, 0);
             break;
 
         default:

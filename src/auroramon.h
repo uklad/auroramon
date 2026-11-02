@@ -29,6 +29,20 @@
 #include <wx/calctrl.h>
 #include <wx/progdlg.h>
 #include <wx/spinctrl.h>
+#include <wx/thread.h>
+
+#include <cctype>
+#include <climits>
+#include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <ctime>
+#include <sys/stat.h>
+#ifndef __WXMSW__
+#include <fcntl.h>
+#include <unistd.h>
+#endif
 
 
 // #define FLASH_MEMORY   // write to files less often
@@ -85,6 +99,7 @@ enum
     idPulseTimer,
     idLogStatusTimer,
     idSetTimeTimer,
+    idRetryCommandTimer,
 
     dlgOK,
     dlgAccept,
@@ -189,6 +204,11 @@ typedef struct {
     double energy_total[6];
     int time_offset;
     int need_time_offset;
+    int shown_time_offset;       // copies for the GUI, updated between polls
+    int shown_need_time_offset;
+    int auto_set_time;           // option: seconds between syncs of the inverter's clock, 0=never
+    time_t last_clock_check;
+    int clock_check_done;        // the result of this check has been dealt with
     int previous_minute;
     int period_in_minute;
     unsigned int counters[4];
@@ -257,6 +277,7 @@ class Mainframe: public wxFrame
         void SetupStatusPanel(int control);
         void MakeInverterMenu(int control);
         wxTimer logstatus_timer;
+        wxTimer retry_command_timer;
 
     private:
         void OnClose(wxCloseEvent& event);
@@ -269,9 +290,11 @@ class Mainframe: public wxFrame
         void OnStartupTimer(wxTimerEvent &event);
         void OnPulseTimer(wxTimerEvent &event);
         void OnLogStatusTimer(wxTimerEvent &event);
+        void OnRetryCommandTimer(wxTimerEvent &event);
         void MakeMenus();
         void MakeStatusPanel();
-        void PlaceReadings(int type, int inv, int x, bool show);
+        void PlaceGroup(wxSizer *group);
+        void PlaceExtraReadings(int inv);
         void ShowEnergy(int inverter);
         void ShowHelp();
 
@@ -290,9 +313,18 @@ class Mainframe: public wxFrame
         wxTextCtrl *txt_efficiency[N_INV];
         wxTextCtrl *txt_temperature[N_INV];
         wxTextCtrl *txt_energy[N_INV][6];
+        wxTextCtrl *txt_today[N_INV];    // for the status bar style which only shows today's energy
         wxTextCtrl *txt_dsp_param[N_INV][N_EXTRA_READINGS];
         wxStaticText *txt_dsp_label[N_INV][N_EXTRA_READINGS];
         double power_total[N_INV];
+
+        // the groups of readings in the status panel, which ones are shown depends on the chart page
+        wxSizer *sizer_status;
+        wxSizer *sizer_power[N_INV];
+        wxSizer *sizer_input[N_INV];
+        wxSizer *sizer_energy[N_INV];
+        wxSizer *sizer_extra[N_INV];
+        wxSizer *sizer_today;
 
         DECLARE_EVENT_TABLE()
 };
@@ -468,17 +500,6 @@ class DlgLocation: public wxDialog
 };
 
 
-class PowerMeter: public wxFrame
-{//=============================
-    public:
-        PowerMeter(wxWindow *parent);
-        ~PowerMeter();
-
-    private:
-};
-
-
-
 class DlgChart: public wxDialog
 {//============================
     public:
@@ -544,6 +565,7 @@ class DlgInverter: public wxDialog
         wxButton *button_OK;
         wxButton *button_Cancel;
         wxCheckBox *t_retrieve;
+        wxChoice *t_set_time;
         wxTextCtrl *t_scale10sec;
         wxTextCtrl *t_string_name[2];
 
@@ -746,13 +768,83 @@ class DlgCoords: public wxDialog
 #define cmdResetPartial   26
 #define cmdInverter10SecEnergy 27
 #define cmdInverterDailyEnergy 28
+#define cmdAutoSetInvTime 29
+
+// Automatic setting of the inverter's clock
+#define CLOCK_TOLERANCE   5           // seconds, leave the clock alone if it's this close
+#define CLOCK_MAX_CHANGE  (26*3600)   // seconds, a larger difference needs a person to look at it
 
 extern wxString cmdoutput;
 extern int command_inverter;
 extern int command_type;
 
+// Convert a measured value for storage in 16 bits.  Saturates rather than wraps.
+// 0xffff is reserved to mean "no value"
+inline unsigned short ToUShort(double value)
+{
+    if(!(value > 0))   // also catches NaN
+        return(0);
+    if(value >= 0xfffe)
+        return(0xfffe);
+    return((unsigned short)value);
+}
+
+inline short ToShort(double value)
+{
+    if(value != value)
+        return(0);
+    if(value <= -32768)
+        return(-32768);
+    if(value >= 32767)
+        return(32767);
+    return((short)value);
+}
+
+// The index of a 10 second period, or -1 if the time isn't valid.
+// (seconds may be -1 in log files written by earlier versions, just after midnight)
+inline int TimeToPeriod(int hours, int mins, int secs)
+{
+    if((hours < 0) || (hours > 23) || (mins < 0) || (mins > 59) || (secs < -1) || (secs > 59))
+        return(-1);
+    return(hours*360 + mins*6 + secs/10);
+}
+
+// Held by the inverter thread throughout each poll.  The GUI thread holds it
+// while changing settings which that thread reads.  Not recursive.
+extern wxMutex comms_mutex;
+
+void PvoSendLive(const wxString &query, const wxString &fail_line);
+void ResendPvoutput(int timeval);
+void PvoShutdown();
+void InvalidateDates();
+void CommsShutdown();
+
+// Dialog layout.  Controls have different sizes with different toolkits, themes and fonts,
+// so dialogs use sizers rather than fixed positions.
+#define DLG_BORDER  12
+#define DLG_GAP      6
+
+// a row of buttons, at the right
+inline wxSizer *MakeButtonRow(wxButton *b1, wxButton *b2 = NULL, wxButton *b3 = NULL)
+{
+    wxBoxSizer *row = new wxBoxSizer(wxHORIZONTAL);
+    row->AddStretchSpacer();
+    row->Add(b1, 0, wxLEFT, DLG_GAP);
+    if(b2 != NULL)
+        row->Add(b2, 0, wxLEFT, DLG_GAP);
+    if(b3 != NULL)
+        row->Add(b3, 0, wxLEFT, DLG_GAP);
+    return(row);
+}
+
+// a label in a grid, lined up with the control next to it
+inline void AddGridLabel(wxWindow *parent, wxSizer *grid, const wxString &text)
+{
+    grid->Add(new wxStaticText(parent, -1, text), 0, wxALIGN_CENTER_VERTICAL);
+}
+
 int GetGmtOffset(time_t timeval);
-void MakeDate(wxDateTime &date, wxString ymd);
+bool MakeDate(wxDateTime &date, wxString ymd);
 wxString MakeDateString(wxString ymd);
 void SerialClose();
 void ConfigSave(int control);

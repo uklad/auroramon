@@ -50,6 +50,7 @@ unsigned short *points_dsp[2][N_DSP];
 wxPoint points[N_10SEC+3];
 static int draw_width = 0;
 static int graph_date_width = 0;
+static int graph_title_x = 16;   // to the right of the labels of the left scale
 
 const double range_adjust[11] = {0.125, 0.1768, 0.25, 0.3536, 0.5, 0.7071, 1.0, 1.4142, 2.0, 2.8284, 4.0};
 
@@ -106,22 +107,26 @@ void GraphPanel::SetColours(int white)
 
 
 DlgCoords::DlgCoords(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Coords"), wxPoint(0, 116), wxSize(320,280+DLG_HX))
+    : wxDialog(parent, -1, _T("Coords"), wxPoint(0, 116))
 {//====================================
-    int x, y;
     int ix;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(2, 2, 2*DLG_GAP);
+    const wxSize value_size(GetTextExtent(_T("000000.00")).GetWidth(), -1);
 
-    x = 80;
-    y = 0;
-
-    new wxStaticText(this, -1, _T("Time"), wxPoint(8, 0));
-    t_time = new wxStaticText(this, -1, wxEmptyString, wxPoint(x, 0));
+    grid->Add(new wxStaticText(this, -1, _T("Time")));
+    t_time = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, value_size);
+    grid->Add(t_time);
     for(ix=0; ix<5; ix++)
     {
-        y += 16;
-        t_label[ix] = new wxStaticText(this, -1, wxEmptyString, wxPoint(8, y));
-        t_value[ix] = new wxStaticText(this, -1, wxEmptyString, wxPoint(x, y), wxSize(100, 200));
+        // room for the longest label, these are set when there's a graph to show
+        t_label[ix] = new wxStaticText(this, -1, _T("Efficiency"));
+        t_value[ix] = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, value_size);
+        grid->Add(t_label[ix]);
+        grid->Add(t_value[ix]);
     }
+    top->Add(grid, 1, wxEXPAND | wxALL, DLG_GAP);
+    SetSizerAndFit(top);
 }
 
 
@@ -141,15 +146,13 @@ void DlgCoords::ShowDlg(CHART_PAGE *chart_page, int period)
 
     if(period < 0)
         period = prev_period;
+    if(period >= N_10SEC)
+        period = N_10SEC - 1;   // the graph window can extend past the end of the day
     prev_period = period;
 
     if(IsShown() == false)
     {
-#ifdef __WXMSW__
-        SetSize(0, 116, 150, 100+DLG_HX);
-#else
-        SetSize(0, 116, 150, 96+DLG_HX);
-#endif
+        Move(0, 116);
     }
 
     t_time->SetLabel(wxString::Format(_T("%d:%.2d:%.2d"), period/360, (period/6)%60, (period%6)*10));
@@ -377,6 +380,10 @@ void GraphPanel::SetExtent()
     int width, height;
     int centre;
     static int extent_prev = 0;
+
+    if((chart_mode == 0) && (x_scale <= 0))
+        return;   // the scale isn't set yet, OnDraw() will call this again
+
     static int mode_prev = 0;
 
     GetViewStart(&scroll_x, &scroll_y);
@@ -566,7 +573,7 @@ int GraphPanel::OnKey2(wxKeyEvent& event)
             while(page > 0)
             {
                 page--;
-                if((inverter_address[1] == 0) && (chart_pages[count].status_type == 3))
+                if((inverter_address[1] == 0) && (chart_pages[page].status_type == 3))
                 {
                     // ignore an inverter-B page if we only have onw inverter
                 }
@@ -698,6 +705,8 @@ static void AllocGraphPoints(int width)
     int inv;
     int size = width * sizeof(unsigned short);
     int ix;
+    int j;
+    int code;
 
     for(inv=0; inv < 2; inv++)
     {
@@ -709,11 +718,23 @@ static void AllocGraphPoints(int width)
         points_pw2[inv] = (unsigned short *)realloc(points_pw2[inv], size);
         points_tmpr[inv] = (short *)realloc(points_tmpr[inv], size);
 
+        // includes buffers for any reading which isn't graphed at the moment, it may return later
         for(ix=0; ix<N_EXTRA_READINGS; ix++)
         {
-            if(extra_readings[ix].graph_slot > 0)
+            if((extra_readings[ix].graph_slot > 0) && (points_dsp[inv][extra_readings[ix].dsp_code] == NULL))
             {
-                points_dsp[inv][extra_readings[ix].dsp_code] = (unsigned short *)realloc(points_dsp[inv][extra_readings[ix].dsp_code], size);
+                points_dsp[inv][extra_readings[ix].dsp_code] = (unsigned short *)malloc(size);
+                for(j=0; j<width; j++)
+                    points_dsp[inv][extra_readings[ix].dsp_code][j] = 0xffff;
+            }
+        }
+        for(code=0; code<N_DSP; code++)
+        {
+            if(points_dsp[inv][code] != NULL)
+            {
+                points_dsp[inv][code] = (unsigned short *)realloc(points_dsp[inv][code], size);
+                for(j=0; j<width; j++)
+                    points_dsp[inv][code][j] = 0xffff;
             }
         }
     }
@@ -1131,8 +1152,12 @@ void GraphPanel::OnDraw(wxDC &dc)
             for(inv=0; inv<2; inv++)
             {
                 if(points_dsp[inv][extra_readings[ix].dsp_code] == NULL)
-                    points_dsp[inv][extra_readings[ix].dsp_code] = (unsigned short *)malloc(width * sizeof(unsigned short));
-
+                {
+                    // all these buffers are draw_width long, it's the most that may be written
+                    points_dsp[inv][extra_readings[ix].dsp_code] = (unsigned short *)malloc(draw_width * sizeof(unsigned short));
+                    for(j=0; j<draw_width; j++)
+                        points_dsp[inv][extra_readings[ix].dsp_code][j] = 0xffff;
+                }
             }
         }
     }
@@ -1155,6 +1180,8 @@ void GraphPanel::OnDraw(wxDC &dc)
 
     if((start_ix > (sun.sunrise - margin)) || (start_ix == 0))
         start_ix = sun.sunrise - margin;
+    if(start_ix < 0)
+        start_ix = 0;
 
     if(top_ix < start_ix)
         top_ix = start_ix;
@@ -1198,7 +1225,7 @@ void GraphPanel::OnDraw(wxDC &dc)
             for(j=0; j<scale; j++)
             {
                 k = ((ix+x_scroll*2)*scale + j) + start_ix;
-                if(k <= top_ix)
+                if((k >= 0) && (k <= top_ix) && (k < N_10SEC))
                 {
                     if(graph_data[inv][k].pw0 != 0xffff)
                     {
@@ -1212,7 +1239,7 @@ void GraphPanel::OnDraw(wxDC &dc)
                         vt1 += graph_data[inv][k].vt1;
                         vt2 += graph_data[inv][k].vt2;
                         tmpr += graph_data[inv][k].tmpr;
-                        pwi += graph_data[0][k].pwi;
+                        pwi += graph_data[inv][k].pwi;
                         n_samples++;
                     }
 
@@ -1375,7 +1402,7 @@ void GraphPanel::OnDraw(wxDC &dc)
                         dc.SetTextForeground(colour);
                         dc.SetPen(colour);
                         dc.DrawLine(x_scroll+width-30, y, x_scroll+width, y);
-                        dc.DrawText(string, x_scroll+width-26, y);
+                        dc.DrawText(string, x_scroll+width-dc.GetTextExtent(string).GetWidth()-2, y);
                     }
                 }
             }
@@ -1389,18 +1416,20 @@ void GraphPanel::OnDraw(wxDC &dc)
         wxCoord h;
         double energy;
 
-        y = 16;
+        // below the time labels, and to the right of the left scale's labels
+        y = dc.GetCharHeight() + 2;
+        graph_title_x = dc.GetTextExtent(_T("00000")).GetWidth() + 8;
         dc.SetTextForeground(colour_text1);
         dc.SetFont(Font_GraphDate);
         dc.GetTextExtent(graph_date, &graph_date_width, &h);
-        dc.DrawText(graph_date, x_scroll+16, y);
+        dc.DrawText(graph_date, x_scroll+graph_title_x, y);
         dc.SetFont(Font_ChartName);
-        dc.DrawText(wxString(chart_page->name, wxConvLocal), x_scroll+16, y+32);
+        dc.DrawText(wxString(chart_page->name, wxConvLocal), x_scroll+graph_title_x, y+h);
 
         if(strcmp(ymd_energy, graph_date_ymd.mb_str(wxConvLocal)) == 0)
         {
             dc.SetTextForeground(colour_text2);
-            dc.DrawText(wxString::Format(_T("%5.3f kWh"), inverters[0].energy_total[0] + inverters[1].energy_total[0]), x_scroll+graph_date_width+31, y+7);
+            dc.DrawText(wxString::Format(_T("%5.3f kWh"), inverters[0].energy_total[0] + inverters[1].energy_total[0]), x_scroll+graph_title_x+graph_date_width+15, y+7);
         }
         else
         {
@@ -1410,7 +1439,7 @@ void GraphPanel::OnDraw(wxDC &dc)
             {
                 dc.SetTextForeground(colour_text1);
 //                dc.DrawText(wxString::Format(_T("%5.2f kWh"), energy), graph_date_width+24, y+7);
-                dc.DrawText(wxString::Format(_T("%5.3f kWh"), energy), x_scroll+graph_date_width+31, y+7);
+                dc.DrawText(wxString::Format(_T("%5.3f kWh"), energy), x_scroll+graph_title_x+graph_date_width+15, y+7);
             }
         }
     }
@@ -1430,7 +1459,7 @@ void GraphPanel::AddPoint(int inverter, int time, DATAREC *datarec, int control)
     if(datarec == NULL)
     {
         // only refresh the energy total at the top left
-        RefreshRect(wxRect(graph_date_width, 23, 144, 24));  // update the energy total
+        RefreshRect(wxRect(graph_title_x+graph_date_width, 10, 240, 60));  // update the energy total
         return;
     }
 
@@ -1447,8 +1476,13 @@ void GraphPanel::AddPoint(int inverter, int time, DATAREC *datarec, int control)
 
     memcpy(&graph_data[inverter][time], datarec, sizeof(DATAREC));
 
-    if(time >= start_ix)
+    // not simply 'time', the clock goes back when daylight saving ends
+    if((time >= start_ix) && (time > top_ix))
         top_ix = time;
+
+    if(x_scale <= 0)
+        return;   // the first OnDraw() sets the scale, and it will draw this point
+
     GetClientSize(&width,&height);
     GetViewStart(&x_scroll, &y_scroll);
     x_scroll *= N_SCROLL;
@@ -1463,7 +1497,7 @@ void GraphPanel::AddPoint(int inverter, int time, DATAREC *datarec, int control)
     {
         if(control & 1)
         {
-            RefreshRect(wxRect(graph_date_width, 23, 144, 24));  // update the energy total
+            RefreshRect(wxRect(graph_title_x+graph_date_width, 10, 240, 60));  // update the energy total
         }
         w = ((double)CLIPPING_WIDTH + 0.5)/ x_scale;
         RefreshRect(wxRect(x-w, 0, w+1, height));
@@ -1480,6 +1514,7 @@ void GraphPanel::NewDay(void)
     unsigned short *p;
 
     newday = 1;
+    top_ix = 0;
 
     for(inv=0; inv<2; inv++)
     {
@@ -1533,6 +1568,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     DATAREC *gp;
     BINARY_LOG bdata;
     char buf[256];
+    char fname_buf[1024];
     char date_str2[20];
     char date_match[20];
     float data_pw0[N_10SEC];   // 10sec periods in 1day
@@ -1548,8 +1584,19 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     int column_dsp[16];
 
     memset(column_types, 0, sizeof(column_types));
-    column_types[6] = 1;  // default is Grid_V only, extra_reading_types index for Grid_V
-    column_dsp[6] = DSP_GRID_VOLTS;    // dsp number for Grid_V
+    memset(date_str2, 0, sizeof(date_str2));
+    memset(date_match, 0, sizeof(date_match));
+
+    // Logs from before column headers were added have Grid_V as the only extra column.
+    // A column-header line replaces this.
+    for(ix=1; extra_reading_types[ix].name != NULL; ix++)
+    {
+        if(extra_reading_types[ix].dsp_code == DSP_GRID_VOLTS)
+        {
+            column_types[6] = ix;
+            column_dsp[6] = DSP_GRID_VOLTS;
+        }
+    }
 
     if(date_str == NULL)
     {
@@ -1566,7 +1613,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     }
     else
     {
-        strcpy(date_str2, date_str);
+        strncpy0(date_str2, date_str, sizeof(date_str2));
     }
 
     if((inv >= 0) && (inv < N_INV) && graph_data[inv] != NULL)
@@ -1579,16 +1626,16 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     }
 
 
-    strcpy(buf, filename.mb_str(wxConvLocal));
-    if((f_in = fopen(buf, "rb")) == NULL)
+    strncpy0(fname_buf, filename.mb_str(wxConvLocal), sizeof(fname_buf)-4);
+    if((f_in = fopen(fname_buf, "rb")) == NULL)
     {
         // also look for file with .txt or .dat extension ('filename' may already have an extension)
-        strcat(buf, ".txt");
-        if((f_in = fopen(buf, "rb")) == NULL)
+        strcat(fname_buf, ".txt");
+        if((f_in = fopen(fname_buf, "rb")) == NULL)
         {
-            buf[strlen(buf)-4] = 0;
-            strcat(buf,".dat");
-            if((f_in = fopen(buf, "rb")) == NULL)
+            fname_buf[strlen(fname_buf)-4] = 0;
+            strcat(fname_buf,".dat");
+            if((f_in = fopen(fname_buf, "rb")) == NULL)
             {
                 Refresh();
                 return(-1);
@@ -1616,7 +1663,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     {
         data_type = 1;
         p_time = buf;
-        sscanf(&buf[5], "%s", date_str2);
+        sscanf(&buf[5], "%19s", date_str2);
         memset(data_pwi, 0, sizeof(data_pwi));
     }
     else
@@ -1624,7 +1671,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     {
         data_type = 2;
         p_time = buf;
-        sscanf(&buf[5], "%s", date_str2);
+        sscanf(&buf[5], "%19s", date_str2);
         memset(data_pwi, 0, sizeof(data_pwi));
     }
     else
@@ -1683,6 +1730,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
         {
             if((graph_data[inv] = (DATAREC *)realloc(graph_data[inv], N_10SEC * sizeof(DATAREC))) == NULL)
             {
+                fclose(f_in);
                 return(-3);
             }
         }
@@ -1747,12 +1795,16 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
                 if(memcmp(buf, "time\t", 5) == 0)
                 {
                     // column headers
-                    n = sscanf(&buf[5], "%s %s %s %s %s %s %s %s %s %s %s %s %s %s",
+                    n = sscanf(&buf[5], "%19s %19s %19s %19s %19s %19s %19s %19s %19s %19s %19s %19s %19s %19s",
                                cn[0], cn[1], cn[2], cn[3], cn[4], cn[5],
                                cn[6], cn[7], cn[8], cn[9], cn[10], cn[11], cn[12], cn[13]);
-                    for(column=6; column<n; column++)
+                    // this header replaces any previous description of the columns
+                    for(column=6; column<16; column++)
                     {
                         column_types[column] = 0;
+                    }
+                    for(column=6; column<n; column++)
+                    {
                         for(ix=0; ix<N_EXTRA_READINGS; ix++)
                         {
                             if((type = extra_readings[ix].type) > 0)
@@ -1793,9 +1845,8 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
 
             if(n >= 4)
             {
-                timeix = (hours * 3600) + (mins * 60) + secs;
-                timeix = timeix /10;
-                if(timeix < N_10SEC)
+                timeix = TimeToPeriod(hours, mins, secs);
+                if(timeix >= 0)
                 {
                     data_pw0[timeix] += d.power[0];
                     n_samples_pw0[timeix]++;
@@ -1823,7 +1874,16 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
                             if(column_types[column] > 0)
                             {
                                 ptype = &extra_reading_types[column_types[column]];
-                                dsp_data[inv][column_dsp[column]][timeix] = (int)((d.extra[column-6] + ptype->addition) * ptype->multiply);
+                                if(dsp_data[inv][column_dsp[column]] == NULL)
+                                {
+                                    // only a log without a column-header line gets here
+                                    int j;
+                                    unsigned short *p;
+                                    dsp_data[inv][column_dsp[column]] = p = (unsigned short *)malloc(sizeof(unsigned short) * N_10SEC);
+                                    for(j=0; j<N_10SEC; j++)
+                                        p[j] = 0xffff;
+                                }
+                                dsp_data[inv][column_dsp[column]][timeix] = ToUShort((d.extra[column-6] + ptype->addition) * ptype->multiply);
                             }
                         }
                     }
@@ -1837,9 +1897,8 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
             d.power[0] = 0;
             if(sscanf(p_time, "%d:%d:%d %f", &hours, &mins, &secs, &d.power[0]) == 4)
             {
-                timeix = (hours * 3600) + (mins * 60) + secs;
-                timeix = timeix /10;
-                if(timeix < N_10SEC)
+                timeix = TimeToPeriod(hours, mins, secs);
+                if(timeix >= 0)
                 {
                     data_pwi[timeix] = d.power[0];
 
@@ -1869,6 +1928,13 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
         {
             Refresh();
             return(-3);
+        }
+        for(ix=0; ix<N_10SEC; ix++)
+        {
+            // the imported formats only set part of each record
+            memset(&graph_data[inv][ix], 0, sizeof(DATAREC));
+            graph_data[inv][ix].pw0 = 0xffff;
+            graph_data[inv][ix].pw1 = 0xffff;
         }
     }
 
@@ -1917,7 +1983,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
 
             if(n_samples_pw0[ix] > 0)
             {
-                gd[0].pw0 = (unsigned int)(data_pw0[ix] * X_PO / n_samples_pw0[ix]);
+                gd[0].pw0 = ToUShort(data_pw0[ix] * X_PO / n_samples_pw0[ix]);
 
                 gap = ix - prev_ix_pw0;
                 if((prev_ix_pw0 > 0) && (gap > 1) && (gap < MAX_GAP))
@@ -1937,11 +2003,11 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
 
             if(n_samples[ix] > 0)
             {
-                gd[0].pw1 = (unsigned int)(data_pw1[ix] * X_PI / n_samples[ix]);
-                gd[0].vt1 = (unsigned int)(data_vt1[ix] * X_VI / n_samples[ix]);
-                gd[0].pw2 = (unsigned int)(data_pw2[ix] * X_PI / n_samples[ix]);
-                gd[0].vt2 = (unsigned int)(data_vt2[ix] * X_VI / n_samples[ix]);
-                gd[0].tmpr = (int)(data_tmpr[ix] * 100 / n_samples[ix]);
+                gd[0].pw1 = ToUShort(data_pw1[ix] * X_PI / n_samples[ix]);
+                gd[0].vt1 = ToUShort(data_vt1[ix] * X_VI / n_samples[ix]);
+                gd[0].pw2 = ToUShort(data_pw2[ix] * X_PI / n_samples[ix]);
+                gd[0].vt2 = ToUShort(data_vt2[ix] * X_VI / n_samples[ix]);
+                gd[0].tmpr = ToShort(data_tmpr[ix] * 100 / n_samples[ix]);
                 gd[0].pwi = 0;
 
                 gap = ix - prev_ix;
@@ -1974,7 +2040,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
         // Aurora Communicator exported data
         for(ix=0; ix<(N_10SEC-48); ix++)
         {
-            graph_data[0][ix].pwi = (int)(data_pwi[ix] * 10);
+            graph_data[inv][ix].pwi = ToUShort(data_pwi[ix] * 10);
         }
     }
     else
@@ -1983,7 +2049,7 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
         //  aurora -q data
         for(ix=0; ix<(N_10SEC-48); ix++)
         {
-            graph_data[0][ix].pwi = (int)(data_pwi[ix+8] * 10);
+            graph_data[inv][ix].pwi = ToUShort(data_pwi[ix+8] * 10);
         }
     }
 
@@ -1995,70 +2061,6 @@ int GraphPanel::ReadEnergyFile(int inv, wxString filename, int control, const ch
     return(0);
 }
 
-
-
-int ConvertLogBinary(wxString fname)
-{//=================================
-    FILE *f_in;
-    FILE *f_out;
-    int n;
-    int hrs, mins, secs;
-    int time10sec;
-    wxString fname_out;
-    char buf[256];
-
-    BINARY_LOG data;
-
-    float d[8];
-
-    if(fname.Right(4) != _T(".txt"))
-    {
-        return(1);
-    }
-    if((f_in = fopen(fname.mb_str(wxConvLocal), "r")) == NULL)
-    {
-        return(2);  // can't read file
-    }
-    if((fgets(buf, sizeof(buf), f_in) == NULL) || (memcmp(buf, "AUR1 2", 4) != 0))
-    {
-        return(3);  // not a textfile log
-    }
-
-    fname_out = fname.BeforeLast('.') + _T(".dat");
-    if((f_out = fopen(fname_out.mb_str(wxConvLocal), "wb")) == NULL)
-    {
-        fclose(f_in);
-        return(4);  // can't create binary log file
-    }
-
-    buf[3] = '2';   // change AUR1 to AUR2
-    fwrite(buf, 1, strlen(buf), f_out);  // copy the first line of text
-
-    while(fgets(buf, sizeof(buf), f_in) != NULL)
-    {
-        n = sscanf(buf, "%d:%d:%d %f %f %f %f %f %f %f", &hrs, &mins, &secs, &d[1], &d[2], &d[3], &d[4], &d[5], &d[6], &d[7]);
-        if(n < 10)
-            continue;
-
-        time10sec = hrs*360 + mins*6 + secs/10;
-        if((time10sec < 0) || (time10sec >= N_10SEC))
-            continue;
-
-        data.time = time10sec;
-        data.pw0 = (unsigned int)(d[1] * X_PO + 0.5);   // power output
-        data.pw1 = (unsigned int)(d[2] * X_PI + 0.5);   // power input 1
-        data.vt1 = (unsigned int)(d[3] * X_VI + 0.5);  // voltage input 1
-        data.pw2 = (unsigned int)(d[4] * X_PI + 0.5);   // power input 2
-        data.vt2 = (unsigned int)(d[5] * X_VI + 0.5);  // voltage input 2
-        data.tmpr = (int)(d[6] * 100 + 0.5);  // temperature
-        data.spare = 0;
-
-        fwrite(&data, sizeof(data), 1, f_out);
-    }
-    fclose(f_in);
-    fclose(f_out);
-    return(0);
-}  // end of ReadEnergyFile
 
 
 int SavePvoutput(int inv)

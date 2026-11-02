@@ -194,7 +194,11 @@ void FindDates()
             {
                 // filename must end with a year
                 s = leaf.Mid(8, 1);
-                s.ToLong(&inverter);
+                if(!s.ToLong(&inverter) || (inverter < 0) || (inverter >= N_INV))
+                {
+                    fname = wxFindNextFile();   // not one of our files
+                    continue;
+                }
 
                 if((f = fopen(fname.mb_str(wxConvLocal), "r")) != NULL)
                 {
@@ -202,7 +206,7 @@ void FindDates()
                     {
                         if(buf[0] == '#') continue;
 
-                        n = sscanf(buf, "%s %f %f %f %f %f %f", date_str, &energy[0], &energy[1], &energy[2], &energy[3], &energy[4], &energy[5]);
+                        n = sscanf(buf, "%19s %f %f %f %f %f %f", date_str, &energy[0], &energy[1], &energy[2], &energy[3], &energy[4], &energy[5]);
                         if(n < 2)
                            continue;
 
@@ -301,8 +305,14 @@ void CollectDates(int force)
 
     FindYears();
     FindDates();
-    collected_dates = 0;
+    collected_dates = 1;
+}
 
+
+void InvalidateDates()
+{//===================
+    // the files have changed, read them again when the information is next needed
+    collected_dates = 0;
 }
 
 
@@ -324,7 +334,7 @@ wxString NextDate(const wxString date_str, int skip)
         {
             doy = 0;
             yearix++;
-            if(yeartab_flags[yearix] == NULL)
+            if((yearix >= N_YEARS) || (yeartab_flags[yearix] == NULL))
                 return(wxEmptyString);
 
         }
@@ -388,7 +398,7 @@ wxString PrevDate(const wxString date_str, int skip)
         if(doy < 0)
         {
             yearix--;
-            if(yeartab_flags[yearix] == NULL)
+            if((yearix < 0) || (yeartab_flags[yearix] == NULL))
                 return(wxEmptyString);
 
             doy = NYearDays(yearix + YEAR_FIRST, NULL) - 1;
@@ -457,7 +467,7 @@ int DateEnergy2(int yearix, int doy)
         doy = NYearDays(yearix + YEAR_FIRST, NULL) + doy;
     }
 
-    if(yearix < 0)
+    if((yearix < 0) || (yearix >= N_YEARS))
         return(0);
 
     if(yeartab_energy[0][yearix] != NULL)
@@ -642,7 +652,10 @@ int DisplayDateGraphs(const wxString date_str, int control)
             s = fname2.AfterLast('d');
             s = s.BeforeFirst('_');
             if(s.ToLong(&addr) == false)
+            {
+                fname = wxFindNextFile();   // not one of our log files
                 continue;
+            }
 
             // current inverter addresses may differ from earlier dates
             // Fill matching addresses first
@@ -834,6 +847,7 @@ void GraphPanel::DrawEnergyHistogram(wxDC &dc)
         y_grad2 = 10000;
     }
     // draw vertical scale
+    dc.SetFont(Font_Default);
     for(ix=0; ix < y_max; ix+=y_grad)
     {
         y = height - (int)(ix * yscale);
@@ -842,7 +856,11 @@ void GraphPanel::DrawEnergyHistogram(wxDC &dc)
         else
             dc.SetPen(colour_grid2);
         dc.DrawLine(0+x_scroll, y, width+x_scroll, y);
-        dc.DrawText(wxString::Format(_T("%2dkW"), ix / 1000), x_scroll+width-30, y);
+        {
+            // the width depends on the font
+            wxString scale_label = wxString::Format(_T("%2dkW"), ix / 1000);
+            dc.DrawText(scale_label, x_scroll+width-dc.GetTextExtent(scale_label).GetWidth()-4, y);
+        }
     }
 
     memset(&btime, 0, sizeof(btime));
@@ -1076,25 +1094,22 @@ END_EVENT_TABLE()
 
 
 DlgSelectDate::DlgSelectDate(wxWindow *parent)
-    : wxDialog(parent, -1, wxEmptyString, wxDefaultPosition, wxSize(270,200+DLG_HX))
+    : wxDialog(parent, -1, _T("Select day"))
 {//=================================
-    int y;
     wxDateTime date;
-    long year, month, day;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
 
-    graph_date_ymd.Left(4).ToLong(&year);
-    graph_date_ymd.Mid(4, 2).ToLong(&month);
-    graph_date_ymd.Right(2).ToLong(&day);
-    date.Set(day, wxDateTime::Month(month-1), year);
+    MakeDate(date, graph_date_ymd);
 
-    y = 12;
-    t_calendar = new wxCalendarCtrl(this, -1, wxDefaultDateTime, wxPoint(10, y), wxDefaultSize, wxCAL_SEQUENTIAL_MONTH_SELECTION);
-
+    t_calendar = new wxCalendarCtrl(this, -1, wxDefaultDateTime, wxDefaultPosition, wxDefaultSize, wxCAL_SEQUENTIAL_MONTH_SELECTION);
     t_calendar->SetDate(date);
 
-    y = 160;
-    button_OK = new wxButton(this, wxID_OK, _T("OK"), wxPoint(80,y));
-    button_Cancel = new wxButton(this, wxID_CANCEL, _T("Cancel"), wxPoint(170,y));
+    button_OK = new wxButton(this, wxID_OK, _T("OK"));
+    button_Cancel = new wxButton(this, wxID_CANCEL, _T("Cancel"));
+
+    top->Add(t_calendar, 1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 
     CollectDates(0);
     ShowAvailableDates();

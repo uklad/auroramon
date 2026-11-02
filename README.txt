@@ -1,11 +1,82 @@
 
 auroramon-1.07c.zip
 Contains the source code files and also binaries for 32-bit and 64-bit
-Linux.
+Linux.  The binaries are of version 1.07, they don't include the changes
+listed under version 1.08.
 
 setup_auroramon-1.07.exe
 Is the installer for the Windows version.
 
+
+---------
+Version 1.08   02.11.2026  (modified from 1.07, not by the original author)
+
+Building now requires wxWidgets 3.1.5 or later (eg. libwxgtk3.2-dev).
+The Windows code wasn't built or tested for this version.
+
+Crashes and memory errors:
+1. Crash when inverter B has data but inverter A has none.
+2. Crash on loading a 1.07 log which has no extra-reading columns.  The total
+   energy column now has a header, "Etotal".
+3. Errors in two message formats, the alarm file was never pruned.
+4. Graph buffer overflow when extra readings are added while running.
+5. Memory error in the sun calculations with an out of range sunset time.
+6. Hang on a stray file in a year directory, such as dx_20120301.txt.
+7. Limits on the values read from log files and chartinfo.  Replaced unsafe
+   conversions of the data received from the inverter.
+8. Clicking past the end of the day on a chart.
+
+Wrong data:
+9.  Daily energy retrieved from inverter B was stored as inverter A.
+10. Inverter B's log file could miss a change of column headers.
+11. Inverter B's energy was omitted from the 5 minute data until inverter A
+    had reported.
+12. Sun position: the time zone was used as days instead of hours, half-hour
+    time zones were truncated, and leap years were one day out.
+13. Values too large for the charts now stop at the maximum instead of wrapping
+    round.
+
+PVOutput.org:
+14. Uploads no longer block the program, so a network failure doesn't stop
+    the inverter polling.
+15. The default URL is now https, and an existing http://pvoutput.org setting
+    is changed to https.
+16. The API key is sent in a request header, so it's no longer in the URL or
+    the logs.  The config file is now only readable by its owner.
+
+Other:
+17. "Settings->Inverter B" opened the settings for inverter A.
+18. Saves "every 5 minutes" did not happen every 5 minutes.
+19. The date information is cached instead of the data directory being read on
+    every redraw.
+20. Serial port names may be longer than 19 characters (eg. /dev/serial/by-id/).
+21. Polling restarts if the inverter thread can't be started.
+22. "Reset partial energy and time" now asks for confirmation.
+23. A failed data retrieval is no longer reported as complete.
+24. Added tests/fake_inverter.py to run the program without an inverter.
+
+Screen layout:
+25. All the dialogs and the status bar now size themselves to their contents
+    and the font, so text no longer overlaps the input boxes.  The status bar
+    continues on a second row if it doesn't fit across the window.
+26. "Display->Inverter status" showed only part of the second inverter.
+27. The chart title no longer overlaps the labels of the left scale.
+28. The status lights are drawn with paint events, for Wayland.
+
+Inverter clock and daylight saving:
+29. New option in Settings->Inverter, default Never: sync the inverter's clock
+    to computer time every hour, 6 hours, day or week.  It also syncs at program
+    start and when daylight saving starts or ends.  A difference of 5 seconds or
+    less is left alone, and more than 26 hours is only reported in the message log.
+30. The offset from UTC was wrong for some hours around a daylight saving change.
+31. "Set inverter time" was an hour out for a specified time during daylight
+    saving, or on a date with different daylight saving from now.
+32. The automatic guess of longitude was 15 degrees out if it was first made
+    during daylight saving.
+33. The chart no longer loses its right part when the clock goes back an hour.
+
+Icon:
+34. Added a program icon, see icons/README.txt.
 
 ---------
 Version 1.07   16.05.2013

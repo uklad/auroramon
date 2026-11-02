@@ -39,6 +39,19 @@ PANEL_GROUP panel_groups[N_PANEL_GROUPS];
 #define RADIANS(x)  (x)*M_PI/180
 #define DEGREES(x)  (x)*180/M_PI
 
+// Rounding, or the polar day and night where the sun doesn't rise or set, can
+// put the argument of acos() out of range, which would give NaN.
+static inline double acos_limited(double x)
+{
+    if(x != x)
+        return(M_PI/2);
+    if(x > 1)
+        return(0);
+    if(x < -1)
+        return(M_PI);
+    return(acos(x));
+}
+
 double CalcSun2(int date, int time_ix, int control)
 {//================================================
     int ix;
@@ -76,7 +89,7 @@ double CalcSun2(int date, int time_ix, int control)
 
     Time = (double)(time_ix) / N_10SEC;
 
-    jDay = date + 2415018.5 + (Time - Timezone);
+    jDay = date + 2415018.5 + Time - Timezone3/24;
 
     jCentury = (jDay -2451545)/36525;
     GeomMeanLongSun = fmod(280.46646 + jCentury*(36000.76983 + jCentury*0.0003032), 360.0);
@@ -93,7 +106,7 @@ double CalcSun2(int date, int time_ix, int control)
     SunDeclinRad = asin(sin(RADIANS(ObliqCorr))*sin(RADIANS(SunAppLong)));
     y = tan(RADIANS(ObliqCorr/2))*tan(RADIANS(ObliqCorr/2));
     EqOfTime = 4*DEGREES(y*sin(2*RADIANS(GeomMeanLongSun))-2*EccentEarthOrbit*sin(GeomMeanAnomSun)+4*EccentEarthOrbit*y*sin(GeomMeanAnomSun)*cos(2*RADIANS(GeomMeanLongSun))-0.5*y*y*sin(4*RADIANS(GeomMeanLongSun))-1.25*EccentEarthOrbit*EccentEarthOrbit*sin(2*GeomMeanAnomSun));
-    HASunrise = DEGREES(acos(cos(RADIANS(90.833))/(cos(LatitudeRad)*cos(SunDeclinRad))-tan(LatitudeRad)*tan(SunDeclinRad)));
+    HASunrise = DEGREES(acos_limited(cos(RADIANS(90.833))/(cos(LatitudeRad)*cos(SunDeclinRad))-tan(LatitudeRad)*tan(SunDeclinRad)));
 
     SolarNoon = (720-4* Longitude -EqOfTime+ Timezone3 *60)/1440;
     SunriseTime = SolarNoon - HASunrise * 4/1440;
@@ -107,7 +120,7 @@ double CalcSun2(int date, int time_ix, int control)
     else
         HourAngle -= 180;
 
-    SolarZenith = acos(sin(LatitudeRad)*sin(SunDeclinRad)+cos(LatitudeRad)*cos(SunDeclinRad)*cos(RADIANS(HourAngle)));
+    SolarZenith = acos_limited(sin(LatitudeRad)*sin(SunDeclinRad)+cos(LatitudeRad)*cos(SunDeclinRad)*cos(RADIANS(HourAngle)));
     SolarElevation = 90 - DEGREES(SolarZenith);
 
 
@@ -136,12 +149,13 @@ double CalcSun2(int date, int time_ix, int control)
     SolarElevCorr = SolarElevation + AtmosRefract;
 
     if(HourAngle > 0)
-        SolarAzimuth = fmod(DEGREES(acos(((sin(LatitudeRad)*cos(SolarZenith))-sin(SunDeclinRad))/(cos(LatitudeRad)*sin(SolarZenith))))+180,360);
+        SolarAzimuth = fmod(DEGREES(acos_limited(((sin(LatitudeRad)*cos(SolarZenith))-sin(SunDeclinRad))/(cos(LatitudeRad)*sin(SolarZenith))))+180,360);
     else
-        SolarAzimuth = fmod(540-DEGREES(acos(((sin(LatitudeRad)*cos(SolarZenith))-sin(SunDeclinRad))/(cos(LatitudeRad)*sin(SolarZenith)))),360);
+        SolarAzimuth = fmod(540-DEGREES(acos_limited(((sin(LatitudeRad)*cos(SolarZenith))-sin(SunDeclinRad))/(cos(LatitudeRad)*sin(SolarZenith)))),360);
 
-    if(control & 1)
+    if(control == 1)
     {
+        // control 3 also has this bit set, but its time_ix can be outside the arrays
         double cos_theta;
         double elevation;
         double diff_azimuth;
@@ -215,19 +229,21 @@ int CalcSun(wxString date_ymd)
     date_ymd.Mid(4,2).ToLong(&month);
     date_ymd.Right(2).ToLong(&day);
 	memset(&btime, 0, sizeof(btime));
+	btime.tm_isdst = -1;
 	btime.tm_year = year-1900;
 	btime.tm_mon = month-1;
 	btime.tm_mday = day;
 	mktime(&btime);
 
-    date = (btime.tm_year * 1461)/4 + btime.tm_yday + 2;
+    // the day number used by the NOAA solar spreadsheet, valid for 1901 to 2099
+    date = 365*btime.tm_year + (btime.tm_year-1)/4 + btime.tm_yday + 2;
 
     Timezone3 = TimeZone2;
     if(TimeZone2 > 24)
     {
         //'auto' timezone
-        DateTime.Set((double)date + 2415019 - Timezone);
-        Timezone3 = GetGmtOffset(DateTime.GetTicks()) /3600;
+        DateTime.Set((double)date + 2415019 - Timezone/24);
+        Timezone3 = (double)GetGmtOffset(DateTime.GetTicks()) / 3600.0;   // may include a half hour
     }
 
 
@@ -238,7 +254,7 @@ int CalcSun(wxString date_ymd)
         CalcSun2(date, timeofday, 1);
     }
 
-    sun.max_elev_year = 90 + 23.5 - abs(Latitude);
+    sun.max_elev_year = 90 + 23.5 - fabs(Latitude);
     if(sun.max_elev_year > 90)
         sun.max_elev_year = 90;
 
@@ -248,11 +264,24 @@ int CalcSun(wxString date_ymd)
     sun.sunset_azim = CalcSun2(date, (int)(sun.sunset_time * N_10SEC + 0.5), 4);
     sun.noon_azim = CalcSun2(date, sun.sunnoon, 4);
 
+    // these are used as indexes of the 10 second period arrays
+    if(sun.sunrise < 0)
+        sun.sunrise = 0;
+    if(sun.sunnoon < 0)
+        sun.sunnoon = 0;
+    if(sun.sunnoon >= N_10SEC)
+        sun.sunnoon = N_10SEC - 1;
+    if(sun.sunset < 0)
+        sun.sunset = 0;
+
     if(sun.sunset >= N_10SEC)
     {
-        wxLogError(_T("Longitude is set wrongly for this Timezone"));
         sun.sunset = N_10SEC - 1;
-        return(-1);
+        if(sun.duration < 1440)   // otherwise it's polar day, when the sun doesn't set
+        {
+            wxLogError(_T("Longitude is set wrongly for this Timezone"));
+            return(-1);
+        }
     }
     return(0);
 }
@@ -279,49 +308,4 @@ void SunInfo()
 }
 
 
-
-void MonitorOutput(int power)
-{//==========================
-    static int power_ok = 700;
-    static int power_low = 600;
-    static int power_high = 800;
-    static int state = 0;
-    static int timer_low = 0;
-    static int timer_high = 0;
-    static int timer_high2 = 0;
-
-    if(power > power_high)
-    {
-        if((state == 0) && (timer_high2 == 0))
-            timer_high2 = 5;
-        timer_low = 0;
-    }
-    else
-    if(power >= power_ok)
-    {
-        if((state == 0) && (timer_high == 0))
-            timer_high = 10;
-        timer_high2 = 0;
-        timer_low = 0;
-    }
-    else
-    if((state == 1) && (power < power_low))
-    {
-        timer_high = 0;
-        timer_high2 = 0;
-        if(state == 1)
-        {
-            // action low
-            state = 0;
-        }
-    }
-    else
-    {
-        if((state == 1) && (timer_low == 0))
-            timer_low = 5;
-        timer_high = 0;
-        timer_high2 = 0;
-    }
-
-}
 

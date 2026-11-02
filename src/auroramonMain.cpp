@@ -24,12 +24,11 @@
 #include <wx/sizer.h>
 #include <wx/html/htmlwin.h>
 #include <wx/datetime.h>
-
-#include "wx/socket.h"
-#include "wx/url.h"
-#include "wx/wfstream.h"
+#include <wx/iconbndl.h>
+#include <wx/mstream.h>
 
 #include "auroramon.h"
+#include "auroramon_icon.h"
 
 
 
@@ -44,6 +43,7 @@ BEGIN_EVENT_TABLE(Mainframe, wxFrame)
 	EVT_TIMER(idStartupTimer, Mainframe::OnStartupTimer)
     EVT_TIMER(idPulseTimer, Mainframe::OnPulseTimer)
     EVT_TIMER(idLogStatusTimer, Mainframe::OnLogStatusTimer)
+    EVT_TIMER(idRetryCommandTimer, Mainframe::OnRetryCommandTimer)
     EVT_COMMAND(idInverterData, wxEVT_MY_EVENT, Mainframe::OnInverterEvent)
     EVT_COMMAND(idInverterFail, wxEVT_MY_EVENT, Mainframe::OnInverterEvent)
     EVT_COMMAND(idInverterModelError, wxEVT_MY_EVENT, Mainframe::OnInverterEvent)
@@ -64,7 +64,6 @@ void SendCommand(int inv, int type);
 void InitComms();
 
 
-extern void MonitorOutput(int power);
 extern int SavePvoutput(int inv);
 extern void SunInfo();
 extern void InitCharts();
@@ -105,41 +104,125 @@ int option_date_format;
 //char current_timestring[N_INV][10];
 
 
-PowerMeter::PowerMeter(wxWindow *parent)
-    : wxFrame(parent, -1, _T("Power Meter"), wxPoint(0, 100), wxSize(330,280+DLG_HX), wxCAPTION | wxSTAY_ON_TOP)
-{
-
-}
-
-PowerMeter::~PowerMeter()
-{
-}
-
-PowerMeter *power_meter;
-
-
 int GetGmtOffset(time_t timeval)
 {//=============================
+#ifdef __WXMSW__
     wxDateTime datetime;
     wxDateTime gmt;
-    wxDateTime::Tm tm, tm2;
     wxTimeSpan timespan;
+#endif
 
+#ifndef __WXMSW__
+    // Ask the C library directly.  Converting the UTC time back as if it was a local time
+    // gives the wrong offset for some hours around a change of daylight saving.
+    {
+        struct tm local;
+        time_t t = (timeval == 0) ? time(NULL) : timeval;
+        localtime_r(&t, &local);
+        return((int)local.tm_gmtoff);
+    }
+#else
     if(timeval == 0)
         datetime = wxDateTime::Now();
     else
         datetime.Set(timeval);
 
-#ifdef __WXMSW__
-    gmt = datetime.ToTimezone(wxDateTime::UTC);  // ?? On Linux, this seems to give GMT1 not GMT0
-#else
-    tm = datetime.GetTm();
-    tm2 = datetime.GetTm(wxDateTime::UTC);
-    gmt.Set(tm2);
-#endif
+    gmt = datetime.ToTimezone(wxDateTime::UTC);
 
     timespan = datetime.Subtract(gmt);
     return(timespan.GetSeconds().ToLong());
+#endif
+}
+
+
+static wxIconBundle MakeIcons()
+{//============================
+    wxIconBundle icons;
+
+    if(wxImage::FindHandler(wxBITMAP_TYPE_PNG) == NULL)
+        wxImage::AddHandler(new wxPNGHandler);
+
+    for(size_t ix=0; ix < WXSIZEOF(icon_pngs); ix++)
+    {
+        wxMemoryInputStream stream(icon_pngs[ix].data, icon_pngs[ix].size);
+        wxImage image(stream, wxBITMAP_TYPE_PNG);
+        if(image.IsOk())
+        {
+            wxIcon icon;
+            icon.CopyFromBitmap(wxBitmap(image));
+            icons.AddIcon(icon);
+        }
+    }
+    return(icons);
+}
+
+
+// Should the program look at this inverter's clock now?
+static void ScheduleClockCheck(INVERTER *iv, time_t now)
+{//=====================================================
+    static int prev_gmt_offset = INT_MAX;
+    static bool offset_changed[N_INV] = {false, false};
+    int gmt_offset = GetGmtOffset(0);
+    int inv = iv - inverters;
+
+    if(gmt_offset != prev_gmt_offset)
+    {
+        // daylight saving has started or ended, or this is the program start
+        offset_changed[0] = offset_changed[1] = true;
+        prev_gmt_offset = gmt_offset;
+    }
+
+    if((iv->auto_set_time > 0) && (offset_changed[inv] || ((now - iv->last_clock_check) >= iv->auto_set_time)))
+    {
+        iv->last_clock_check = now;
+        iv->clock_check_done = 0;
+        iv->need_time_offset = 1;   // read the inverter's clock
+    }
+    offset_changed[inv] = false;
+}
+
+
+// The inverter's clock has just been read
+static void CheckInverterClock(int inv)
+{//====================================
+    INVERTER *iv = &inverters[inv];
+    int diff = abs(iv->time_offset);
+
+    if((iv->auto_set_time <= 0) || iv->clock_check_done)
+        return;
+
+    // Not while retrieving 10 second data. It's converted to computer time using this difference
+    if(retrieving_data != 0)
+    {
+        iv->need_time_offset = 1;   // look again later
+        return;
+    }
+
+    if(diff <= CLOCK_TOLERANCE)
+    {
+        iv->clock_check_done = 1;
+        return;
+    }
+
+    if(diff > CLOCK_MAX_CHANGE)
+    {
+        // Something is wrong, it may be the computer's clock.
+        iv->clock_check_done = 1;
+        LogMessage(wxString::Format(_T("Inverter #%d: clock differs from computer time by %d seconds. Not changed, use Inverter->Set inverter time"),
+                   inverter_address[inv], iv->time_offset), 1);
+        return;
+    }
+
+    if(QueueCommand(inv, cmdAutoSetInvTime) == 0)
+    {
+        iv->clock_check_done = 1;
+        LogMessage(wxString::Format(_T("Inverter #%d: clock differs from computer time by %d seconds, setting it"),
+                   inverter_address[inv], iv->time_offset), 1);
+    }
+    else
+    {
+        iv->need_time_offset = 1;   // another command is waiting, try again next time
+    }
 }
 
 
@@ -178,7 +261,7 @@ void LogMessage(wxString message, int control)
             fclose(f);
         }
     }
-    wxLogStatus(string);
+    wxLogStatus(_T("%s"), string);
     mainframe->logstatus_timer.Start(300*1000, wxTIMER_ONE_SHOT);   // 5 minute timer to remove message from the status bar
 }
 
@@ -232,125 +315,11 @@ void CheckEnergyLog()
 }
 
 
-#define MAX_PVOUTPUT_BATCH  30
-void ResendPvoutput(int timeval)
-{//=============================
-    FILE *f_in;
-    FILE *f_out = NULL;
-    wxString fname;
-    wxString fname2;
-    wxString url_string;
-    wxString data_string;
-    wxURLError url_err;
-    wxDateTime date;
-    wxDateTime today;
-    int count;
-    int flag_log;
-    int age;
-    static int prev_time = 0;
-    char buf[80];
-
-    if(prev_time == 0)
-    {
-        // ignore the first call after program start
-        prev_time = timeval;
-    }
-
-    if(timeval == prev_time)
-    {
-        // only run this function every minute
-        return;
-    }
-    prev_time = timeval;
-
-    fname = data_dir + _T("/system/pvoutput_fail.txt");
-    if((f_in = fopen(fname.mb_str(wxConvLocal), "r")) == NULL)
-        return;
-
-    url_string.Printf(_T("%saddbatchstatus.jsp?key=%s&sid=%s&data="), pvoutput.url.c_str(), pvoutput.key.c_str(), pvoutput.sid.c_str());
-
-    today = wxDateTime::Now();
-
-    count = 0;
-    while((count < MAX_PVOUTPUT_BATCH) && (fgets(buf, sizeof(buf), f_in) != NULL))
-    {
-        if(buf[0] != '2')
-            continue;
-
-
-        data_string = wxString(buf, wxConvLocal);
-        MakeDate(date, data_string.Left(8));
-        age = today.Subtract(date).GetDays();
-        if((age < 0) || (age > 13))
-            continue;   // discard old data
-
-        if(count > 0)
-            url_string += _T(";");
-        url_string += data_string.Trim();
-        count++;
-    }
-
-    wxURL url(url_string);
-    if((url_err = url.GetError()) != wxURL_NOERR)
-    {
-        flag_log = 0;
-        if(pvoutput.failed == 0)
-            flag_log = 1;
-        LogMessage(_T("Bad URL: ")+ url_string, flag_log);
-        pvoutput.failed = 1;
-        fclose(f_in);
-        return;
-    }
-
-    wxInputStream *input = url.GetInputStream();  // connect to the URL
-    url_err = url.GetError();
-    if(input == NULL)
-    {
-        flag_log = 0;
-        if(pvoutput.failed == 0)
-            flag_log = 1;
-//        LogMessage(wxString::Format(_T("PVOutput bulk update failed: %d"), url_err), flag_log);
-        fclose(f_in);
-        pvoutput.failed = 1;
-        return;
-    }
-    LogMessage(_T("PVOutput.org bulk update OK"), 1);
-    pvoutput.failed = 0;
-    delete input;
-
-    // are there any lines remaining ?
-    // Copy them to another file.
-    while((fgets(buf, sizeof(buf), f_in)) != NULL)
-    {
-        if(buf[0] != '2')
-            continue;
-
-        if(f_out == NULL)
-        {
-            fname2 = fname + _T("2");
-            if((f_out = fopen(fname2.mb_str(wxConvLocal), "w")) == NULL)
-            {
-                break;
-            }
-        }
-        fprintf(f_out, "%s", buf);
-    }
-    fclose(f_in);
-    wxRemoveFile(fname);
-    if(f_out != NULL)
-    {
-        fclose(f_out);
-        wxRenameFile(fname2, fname);
-    }
-}
-
-
 void LogEnergy(int seconds, const char *ymd)
 {//=========================================
     wxString fname;
-    wxString url_string;
-    wxString err_string;
-    wxURLError url_err;
+    wxString query;
+    wxString fail_line;
     double total_e;
     int total_p;
     FILE *f;
@@ -361,7 +330,6 @@ void LogEnergy(int seconds, const char *ymd)
     int got_power = 0;
     int pvo_period;
     int hours, mins;
-    int flag_log;
     float grid_voltage = -1;
 
     period_5min = seconds/300;
@@ -374,7 +342,7 @@ void LogEnergy(int seconds, const char *ymd)
     total_p = 0;
     for(inv=0; inv < N_INV; inv++)
     {
-        if((inverter_address[inv] != 0) && (strcmp(ymd, inverters[0].today_done) == 0))
+        if((inverter_address[inv] != 0) && (strcmp(ymd, inverters[inv].today_done) == 0))
         {
             total_e += inverters[inv].energy_total[0];
 
@@ -438,78 +406,32 @@ void LogEnergy(int seconds, const char *ymd)
         if((pvo_period == 1) || ((period_5min % pvo_period) == 0))
         {
             // Start of 5 minute, 10 minute, or 15 minute period
-            url_string.Printf(_T("%saddstatus.jsp?key=%s&sid=%s&d=%s&t=%d:%.2d&v1=%d"), pvoutput.url.c_str(), pvoutput.key.c_str(), pvoutput.sid.c_str(),
+            query.Printf(_T("addstatus.jsp?d=%s&t=%d:%.2d&v1=%d"),
                        date_ymd_string.c_str(), hours, mins, (int)(total_e*1000));
 
             if(pvoutput.live_updates & PVO_INSTANTANEOUS)
             {
-                url_string += wxString::Format(_T("&v2=%d"), total_p);
+                query += wxString::Format(_T("&v2=%d"), total_p);
             }
 
             if(pvoutput.live_updates & PVO_TEMPERATURE)
             {
-                url_string += wxString::Format(_T("&v5=%.2f"), inverters[0].temperature);
+                query += wxString::Format(_T("&v5=%.2f"), inverters[0].temperature);
             }
 
             if((pvoutput.live_updates & PVO_GRID_VOLTAGE) && (grid_voltage > 0))
             {
-                url_string += wxString::Format(_T("&v6=%.1f"), grid_voltage);
+                query += wxString::Format(_T("&v6=%.1f"), grid_voltage);
             }
 
-            wxURL url(url_string);
-            if((url_err = url.GetError()) != wxURL_NOERR)
+            // the same reading, in the format for a later batch update if this one fails
+            fail_line.Printf(_T("%s,%d:%.2d,%d,%d,-1,-1,%.2f"), date_ymd_string.c_str(), hours, mins, (int)(total_e*1000), total_p, inverters[0].temperature);
+            if(grid_voltage > 0)
             {
-                flag_log = 0;
-                if(pvoutput.failed == 0)
-                    flag_log = 1;
-                LogMessage(_T("Bad URL: ") + url_string, flag_log);
-                pvoutput.failed = 1;
-                return;
+                fail_line += wxString::Format(_T(",%.1f"), grid_voltage);
             }
 
-            url.GetProtocol().SetTimeout(30);  // change from default=10 mins to 30 seconds
-
-            wxInputStream *input = url.GetInputStream();  // connect to the URL
-            url_err = url.GetError();
-
-            if(input == NULL)
-            {
-                flag_log = 0;
-                if(pvoutput.failed)
-                    flag_log = 1;
-//                LogMessage(_T("PVOutput.org update failed"), flag_log);
-                if(url_err == wxURL_NOHOST)
-                    err_string = _T("No internet");
-                else
-                if(url_err == wxURL_NOPATH)
-                    err_string = _T("No path");
-                else
-                if(url_err == wxURL_CONNERR)
-                    err_string = _T("Connection error");
-                else
-                if(url_err == wxURL_PROTOERR)
-                    err_string = _T("Protocol error");
-                else
-                    err_string = wxString::Format(_T("Error %d"), url_err);
-
-                LogMessage(_T("PVOutput.org update failed: ") + err_string, flag_log);
-                pvoutput.failed = 1;
-
-                fname = data_dir + _T("/system/pvoutput_fail.txt");
-                if((f = fopen(fname.mb_str(wxConvLocal), "a")) != NULL)
-                {
-                    fprintf(f, "%s,%d:%.2d,%d,%d,-1,-1,%.2f",  date_ymd, hours, mins, (int)(total_e*1000), total_p, inverters[0].temperature);
-                    if(grid_voltage > 0)
-                    {
-                        fprintf(f, ",%5.1f", grid_voltage);
-                    }
-                    fputc('\n', f);
-                    fclose(f);
-                }
-            }
-
-            if(input != NULL)
-                delete input;
+            PvoSendLive(query, fail_line);
         }
     }
 }
@@ -523,7 +445,7 @@ void LogColumnHeaders(int inverter, int control)
     int type;
     FILE *f;
     char columns[N_EXTRA_READINGS+1];
-    static char prev_columns[N_EXTRA_READINGS+1] = {0};
+    static char prev_columns[N_INV][N_EXTRA_READINGS+1];   // each inverter has its own log file
 
     if((f = inverters[inverter].f_log) == NULL)
         return;
@@ -537,10 +459,13 @@ void LogColumnHeaders(int inverter, int control)
     }
     columns[n_columns] = 0;
 
-    if((control == 1) && (strcmp(columns, prev_columns) == 0))
+    if((control == 1) && (strcmp(columns, prev_columns[inverter]) == 0))
+    {
+        inverters[inverter].logheaders_changed = 0;
         return;
+    }
 
-    strcpy(prev_columns, columns);
+    strcpy(prev_columns[inverter], columns);
 
     fprintf(f, "%s", "time\tpout\tpw1\tvt1\tpw2\tvt2\ttmpr");
 
@@ -548,20 +473,30 @@ void LogColumnHeaders(int inverter, int control)
     {
         fprintf(f, "\t%s", extra_reading_types[(int)columns[ix]].mnemonic);
     }
-    fputc('\n', f);
+    fprintf(f, "\tEtotal\n");   // written after any extra readings
     fflush(f);
     inverters[inverter].logheaders_changed = 0;
 }
 
 
-void MakeDate(wxDateTime &date, wxString ymd)
+bool MakeDate(wxDateTime &date, wxString ymd)
 {//==========================================
-    long year, month, day;
+// Returns false, and sets today's date, if ymd isn't a valid date (it may come from a file)
+    long year = 0;
+    long month = 0;
+    long day = 0;
 
-    ymd.Left(4).ToLong(&year);
-    ymd.Mid(4,2).ToLong(&month);
-    ymd.Right(2).ToLong(&day);
-    date.Set(day, wxDateTime::Month(month-1), year);
+    if((ymd.Len() == 8) && ymd.Left(4).ToLong(&year) && ymd.Mid(4,2).ToLong(&month) && ymd.Right(2).ToLong(&day))
+    {
+        if((year >= 1900) && (year <= 9999) && (month >= 1) && (month <= 12) && (day >= 1) &&
+           (day <= wxDateTime::GetNumberOfDays(wxDateTime::Month(month-1), (int)year)))
+        {
+            date.Set((wxDateTime::wxDateTime_t)day, wxDateTime::Month(month-1), (int)year);
+            return(true);
+        }
+    }
+    date = wxDateTime::Today();
+    return(false);
 }
 
 
@@ -574,7 +509,7 @@ wxString MakeDateString(wxString ymd)
     MakeDate(date, ymd);
 
     // default is ISO, yyyy-mm-dd
-    if(option_date_format > 4)
+    if((option_date_format < 0) || (option_date_format >= N_DATE_FORMATS))
         option_date_format = 0;
     return(date.Format(fmt[option_date_format]));
 }
@@ -588,7 +523,7 @@ void OpenLogFiles(int create, int control)
     INVERTER *iv;
     struct tm *btime;
     time_t current_time;
-    char fname[256];
+    char fname[1024];
     wxString fname_log;
 
     if(TimeZone2 > 24)
@@ -601,8 +536,10 @@ void OpenLogFiles(int create, int control)
     }
     if(Longitude > 360)
     {
-        // Longitude is not set, guess from TimeZone
-        Longitude = Timezone * 360/24;
+        // Longitude is not set, guess from the standard time zone (not daylight saving, which is an hour out)
+        time(&current_time);
+        btime = localtime(&current_time);
+        Longitude = (Timezone - ((btime->tm_isdst > 0) ? 1 : 0)) * 360/24;
     }
 
     time(&current_time);
@@ -615,8 +552,11 @@ void OpenLogFiles(int create, int control)
     if(date_logchange != date_ymd_string)
     {
         // change to a new com_log
-wxRemoveFile(data_dir+_T("/com_log.txt"));   // location used by previous version
-wxRemoveFile(data_dir+_T("/com_log_yesterday.txt"));
+        // location used by previous versions.  wxRemoveFile() reports an error if there's no file
+        if(wxFileExists(data_dir+_T("/com_log.txt")))
+            wxRemoveFile(data_dir+_T("/com_log.txt"));
+        if(wxFileExists(data_dir+_T("/com_log_yesterday.txt")))
+            wxRemoveFile(data_dir+_T("/com_log_yesterday.txt"));
         fname_log = data_dir+_T("/system/com_log.txt");
         if(wxFileExists(fname_log))
         {
@@ -635,7 +575,10 @@ wxRemoveFile(data_dir+_T("/com_log_yesterday.txt"));
     if (!wxDirExists(data_dir))
         wxMkdir(data_dir);
 
-    data_system_dir = data_dir + _T("/system");
+    {
+        wxMutexLocker lock(comms_mutex);   // the inverter thread reads this
+        data_system_dir = data_dir + _T("/system");
+    }
     if (!wxDirExists(data_system_dir))
         wxMkdir(data_system_dir);
 
@@ -670,8 +613,7 @@ wxRemoveFile(data_dir+_T("/com_log_yesterday.txt"));
         // load any data from today's log file
         graph_panel->ReadEnergyFile(inv, fname_log, control, NULL);
 
-        strcpy(fname, fname_log.mb_str(wxConvLocal));
-        strcat(fname, ".txt");
+        strncpy0(fname, wxString(fname_log + _T(".txt")).mb_str(wxConvLocal), sizeof(fname));
 
         if(GetFileLength(fname))
         {
@@ -684,7 +626,7 @@ wxRemoveFile(data_dir+_T("/com_log_yesterday.txt"));
         {
             if((iv->f_log = fopen(fname, "w")) == NULL)
             {
-                wxLogError(_T("Can't write to log file: ") + fname_log);
+                wxLogError(_T("Can't write to log file: %s"), fname_log);
             }
             else
             {
@@ -697,6 +639,7 @@ wxRemoveFile(data_dir+_T("/com_log_yesterday.txt"));
     CalcSun(graph_date_ymd);   // called after we set the time zone
     graph_panel->ResetGraph();
     display_today = 1;
+    InvalidateDates();   // a new log file may have been created, or the data directory changed
 }  // end of OpenLogFiles
 
 
@@ -758,7 +701,10 @@ void GotInverterInfo(int inv, int ok)
             return;
 
         if((f = fopen(fname.mb_str(wxConvLocal), "r")) != NULL)
+        {
             length = fread(data, 1, length, f);
+            fclose(f);
+        }
         else
             length = 0;
 
@@ -809,6 +755,8 @@ void Mainframe::ShowEnergy(int inv)
         else
             format = _T("%6.3f"); // only show 3 decimal places for "today" energy
         txt_energy[inv][ix]->WriteText(wxString::Format(format, e[ix]));
+        if(ix == 0)
+            txt_today[inv]->ChangeValue(wxString::Format(format, e[ix]));
     }
 }
 
@@ -863,10 +811,12 @@ int Mainframe::DataResponse(int data_ok, INVERTER_RESPONSE *ir)
         }
 
         seconds = computer_seconds - 1;  // allow for delay in receiving the response from the inverter
+        if(seconds < 0)
+            seconds = 0;   // just after midnight
         if(ir->flags & IR_HAS_TIME)
         {
             // inverters[inv].time_offset has been set
-//wxLogStatus(wxString::Format(_T("time offset %d"), inverters[inv].time_offset));
+            CheckInverterClock(inv);
         }
 
         if((ir->flags & IR_HAS_PEAK) && (strcmp(ymd, inverters[inv].today_done) == 0))
@@ -933,6 +883,7 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
                     fprintf(f_daily, "%s %7.3f  %8.3f %8.3f %9.3f %10.3f %9.3f %6d\n", yesterday_str, yesterday,
                             etot[1]-e, etot[2]-e, etot[3]-e, etot[4]-e, etot[5]-e, iv->peak);
                     fclose(f_daily);
+                    InvalidateDates();
                 }
                 iv->previous_total = etot[4] - e;
                 strcpy(iv->today_done, ymd);
@@ -961,8 +912,9 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
                 period_type = 2;   // start of a minute period
                 iv->period_in_minute = 0;
                 iv->previous_minute = seconds / 60;
+                ScheduleClockCheck(iv, current_time);
 
-                if((iv->previous_minute & 5) == 0)
+                if((iv->previous_minute % 5) == 0)
                 {
                     period_type = 3;    // 5 minute period
 
@@ -1003,7 +955,7 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
                                 p[j] = 0xffff;
                         }
                         ptype = &extra_reading_types[extra_readings[ix].type];
-                        dsp_data[inv][dsp_code][inverters[inv].current_period] = (int)((ir->dsp[dsp_code] + ptype->addition) * ptype->multiply);
+                        dsp_data[inv][dsp_code][inverters[inv].current_period] = ToUShort((ir->dsp[dsp_code] + ptype->addition) * ptype->multiply);
                     }
                 }
 
@@ -1060,7 +1012,7 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
                             if(iv->period_in_minute == 0)
                             {
 #ifdef FLASH_MEMORY
-                                if((iv->previous_minute & 5) == 0)
+                                if((iv->previous_minute % 5) == 0)
                                     fflush(iv->f_log);
 #else
                                 fflush(iv->f_log);
@@ -1120,24 +1072,24 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
                 if(ir->n_av_pw0 > 0)
                 {
                     value = iv->averages[0] * X_PO / ir->n_av_pw0;
-                    datarec.pw0 = (unsigned short)(value + 0.5);
+                    datarec.pw0 = ToUShort(value + 0.5);
                 }
 
                 if(ir->n_av_pwin > 0)
                 {
-                    datarec.pw1 = (unsigned short)(iv->averages[1] * X_PI / ir->n_av_pwin);
-                    datarec.vt1 = (unsigned short)(iv->averages[2] * X_VI / ir->n_av_pwin);
-                    datarec.pw2 = (unsigned short)(iv->averages[3] * X_PI / ir->n_av_pwin);
-                    datarec.vt2 = (unsigned short)(iv->averages[4] * X_VI / ir->n_av_pwin);
+                    datarec.pw1 = ToUShort(iv->averages[1] * X_PI / ir->n_av_pwin);
+                    datarec.vt1 = ToUShort(iv->averages[2] * X_VI / ir->n_av_pwin);
+                    datarec.pw2 = ToUShort(iv->averages[3] * X_PI / ir->n_av_pwin);
+                    datarec.vt2 = ToUShort(iv->averages[4] * X_VI / ir->n_av_pwin);
                 }
 
                 if(ir->n_av_tmpr > 0)
                 {
-                    datarec.tmpr= (short)(iv->averages[5] * 100 / ir->n_av_tmpr);
+                    datarec.tmpr= ToShort(iv->averages[5] * 100 / ir->n_av_tmpr);
                 }
                 else
                 {
-                    datarec.tmpr = (unsigned short)(tmpr_max * 100);
+                    datarec.tmpr = ToShort(tmpr_max * 100);
                 }
                 datarec.pwi = 0;
 
@@ -1189,7 +1141,6 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
 
         SetTitle(wxString::Format(_T("Aurora %2d"), power_value));
         txt_powertot->WriteText(wxString::Format(_T("%4d"), power_value));
-        MonitorOutput(power_value);
 
         if(ir->flags & IR_HAS_ENERGY_TODAY)
         {
@@ -1428,7 +1379,12 @@ void Mainframe::OnCommand(wxCommandEvent &event)
 
     case idMenuInverterResetPartial:
     case idMenuInverterResetPartial+1:
-        QueueCommand(id - idMenuInverterResetPartial, cmdResetPartial);
+        // this clears counters in the inverter, and can't be undone
+        if(wxMessageBox(_T("Reset the partial energy and time counters in this inverter?\nThis can't be undone."),
+                        _T("Reset partial counters"), wxYES_NO | wxNO_DEFAULT | wxICON_QUESTION, this) == wxYES)
+        {
+            QueueCommand(id - idMenuInverterResetPartial, cmdResetPartial);
+        }
         break;
 
     case idMenuInverterDailyEnergy:
@@ -1553,7 +1509,7 @@ void Mainframe::MakeMenus()
     else
     {
         settingsMenu->Append(idMenuSetInverter, _T("Inverter A"));
-        settingsMenu->Append(idMenuSetInverter, _T("Inverter B"));
+        settingsMenu->Append(idMenuSetInverter+1, _T("Inverter B"));
     }
     settingsMenu->Append(idMenuPvoutput, _T("PVOutput.org"));
     settingsMenu->AppendSeparator();
@@ -1609,8 +1565,10 @@ Mainframe::Mainframe(wxFrame *frame, const wxString& title)
 	startuptimer.SetOwner(this->GetEventHandler(), idStartupTimer);
     pulsetimer.SetOwner(this->GetEventHandler(), idPulseTimer);
     logstatus_timer.SetOwner(this->GetEventHandler(), idLogStatusTimer);
+    SetIcons(MakeIcons());
+    retry_command_timer.SetOwner(this->GetEventHandler(), idRetryCommandTimer);
 
-    status_panel = new wxPanel(this, -1, wxDefaultPosition, wxSize(100, 52), wxSUNKEN_BORDER);
+    status_panel = new wxPanel(this, -1, wxDefaultPosition, wxDefaultSize, wxSUNKEN_BORDER);
     graph_panel = new GraphPanel(this, wxDefaultPosition, wxSize(100,100));
     wxBoxSizer *frame_sizer = new wxBoxSizer(wxVERTICAL);
     frame_sizer->Add(graph_panel, 1, wxEXPAND);
@@ -1631,7 +1589,6 @@ Mainframe::Mainframe(wxFrame *frame, const wxString& title)
     dlg_pvoutput = new DlgPvoutput(this);
     dlg_settime = new DlgSetTime(this);
     dlg_coords = new DlgCoords(this);
-    power_meter = new PowerMeter(this);
 
     pvoutput.failed = 0;
 
@@ -1677,7 +1634,8 @@ void Mainframe::OnStartupTimer(wxTimerEvent& WXUNUSED(event))
 Mainframe::~Mainframe()
 {//====================
     int ix;
-    SerialClose();
+    CommsShutdown();
+    PvoShutdown();
 
     for(ix=0; ix<N_INV; ix++)
     {
@@ -1697,10 +1655,11 @@ void Mainframe::OnAbout()
 {
     wxAboutDialogInfo info;
     info.SetName(_("Aurora Monitor"));
-    info.SetVersion(_("1.07"));
+    info.SetVersion(_("1.08"));
     info.SetDescription(_("Receives and displays data from up to 2 Aurora power inverters.\n"));
     info.SetCopyright(_T("(C) 2012 Jonathan Duddington <jonsd@users.sourceforge.net>"));
     info.SetLicence(_T("GNU GENERAL PUBLIC LICENSE Version 3\n\nhttp://www.gnu.org/licenses/gpl.html"));
+    info.SetIcon(GetIcons().GetIcon(wxSize(64, 64)));
 
     wxAboutBox(info);
 

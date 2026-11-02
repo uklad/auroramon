@@ -22,6 +22,8 @@
 #include <wx/colordlg.h>
 #include <wx/filename.h>
 #include <wx/sizer.h>
+#include <wx/gbsizer.h>
+#include <wx/wrapsizer.h>
 #include "auroramon.h"
 
 
@@ -30,12 +32,18 @@ wxFont font_medium(19, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_BOLD
 
 #ifdef __WXMSW__
 #define TE_BIG   wxTE_RICH | wxTE_DONTWRAP
-#define HT_PW0  33
 #else
 #define TE_BIG   wxTE_MULTILINE | wxTE_DONTWRAP
-#define HT_PW0  34
 #endif
 
+
+
+// The status lights have their own window, and are drawn with paint events
+// (a wxClientDC doesn't draw on Wayland)
+static wxPanel *pulse_panel = NULL;
+static int pulse_colour[N_INV] = {0, 0};
+static bool pulse_bright[N_INV] = {false, false};
+#define PULSE_SIZE  18
 
 
 void DrawStatusPulse(int pulse)
@@ -43,26 +51,14 @@ void DrawStatusPulse(int pulse)
     int state;
     int colour;
     int inv;
-    int y;
-    wxClientDC dc(status_panel);
-    static wxColour red(0x0000d0);
-    static wxColour red2(0x0010ff);
-    static wxColour yellow(0x00a0c0);
-    static wxColour yellow2(0x00d0ff);
-    static wxColour green(0x087808);
-    static wxColour green2(0x00e800);
 
     static int colour_on[3] =  {0x0020ff, 0x00e800, 0x12c0ff};  // red, green, yellow
     static int colour_off[3] = {0x0000c0, 0x087808, 0x00aacc};
-
-    static int x = 124;
-    static int y_inv[2] = {4, 26};
 
     for(inv = 0; inv < 2; inv++)
     {
         if(inverter_address[inv] > 0)
         {
-            y = y_inv[inv];
             if((state = inverters[inv].alive) > 0)
             {
                 if(inverters[inv].alarm != 0)
@@ -84,14 +80,39 @@ void DrawStatusPulse(int pulse)
                     if(state == 1)
                         colour = 0xffe838;  // green, flashes cyan = retrieving data
                 }
-                dc.SetBrush(wxColour(colour));
-                dc.DrawRectangle(x+1, y+1, 16, 16);
+                pulse_colour[inv] = colour;
+                pulse_bright[inv] = true;
             }
             else
             {
-                dc.SetBrush(wxColour(colour_off[state]));
-                dc.DrawRectangle(x, y, 18, 18);
+                pulse_colour[inv] = colour_off[state];
+                pulse_bright[inv] = false;
             }
+        }
+    }
+    pulse_panel->Refresh();
+}
+
+
+static void OnPulsePaint(wxPaintEvent& WXUNUSED(event))
+{//====================================================
+    int inv;
+    int y;
+    int height = pulse_panel->GetClientSize().GetHeight();
+    wxPaintDC dc(pulse_panel);
+
+    for(inv = 0; inv < 2; inv++)
+    {
+        if(inverter_address[inv] > 0)
+        {
+            // one in each half of the height
+            y = ((height/2) - PULSE_SIZE)/2 + inv*(height/2);
+            dc.SetPen(*wxBLACK_PEN);
+            dc.SetBrush(wxBrush(wxColour(pulse_colour[inv])));
+            if(pulse_bright[inv])
+                dc.DrawRectangle(1, y+1, PULSE_SIZE-2, PULSE_SIZE-2);
+            else
+                dc.DrawRectangle(0, y, PULSE_SIZE, PULSE_SIZE);
         }
     }
 }
@@ -109,138 +130,40 @@ void Mainframe::OnLogStatusTimer(wxTimerEvent& WXUNUSED(event))
 }
 
 
-void Mainframe::PlaceReadings(int type, int inv, int x, bool show)
-{//===============================================================
-// type: 1  Power output
-// type: 2  Power, voltage, current, input. Temperature
-// type: 3  Energy totals
-// type: 4  Grid volts, frequency
-// type: 5  Today energy, both inverters
+// Add a group of readings to the status panel, after the ones already placed
+void Mainframe::PlaceGroup(wxSizer *group)
+{//=======================================
+    sizer_status->Add(group, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 2*DLG_GAP);
+    group->ShowItems(true);
+}
 
+
+void Mainframe::PlaceExtraReadings(int inv)
+{//========================================
     int ix;
-    int posn;
+    int posn = 0;
     wxString label;
 
-    if(type == 1)
-    {
-        if(show == true)
-        {
-            txt_power[inv]->SetSize(x, wxDefaultCoord, 82, HT_PW0);
-            txt_static[inv][0]->SetSize(x+15, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-        }
-        txt_power[inv]->Show(show);
-        txt_static[inv][0]->Show(show);
-    }
-    if(type == 2)
-    {
-        if(show == true)
-        {
-            txt_power1[inv]->SetSize(x, wxDefaultCoord, 46, 20);
-            txt_power2[inv]->SetSize(x, wxDefaultCoord, 46, 20);
-            txt_volts1[inv]->SetSize(x+66, wxDefaultCoord, 41, 20);
-            txt_volts2[inv]->SetSize(x+66, wxDefaultCoord, 41, 20);
-            txt_current1[inv]->SetSize(x+126, wxDefaultCoord, 41, 20);
-            txt_current2[inv]->SetSize(x+126, wxDefaultCoord, 41, 20);
-            txt_efficiency[inv]->SetSize(x+186, wxDefaultCoord, 41, 20);
-            txt_temperature[inv]->SetSize(x+186, wxDefaultCoord, 41, 20);
-            txt_static[inv][2]->SetSize(x+49, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][3]->SetSize(x+49, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][4]->SetSize(x+110, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][5]->SetSize(x+110, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][6]->SetSize(x+170, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][7]->SetSize(x+170, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][8]->SetSize(x+230, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][9]->SetSize(x+230, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-        }
+    PlaceGroup(sizer_extra[inv]);
 
-        txt_power1[inv]->Show(show);
-        txt_power2[inv]->Show(show);
-        txt_volts1[inv]->Show(show);
-        txt_volts2[inv]->Show(show);
-        txt_current1[inv]->Show(show);
-        txt_current2[inv]->Show(show);
-        txt_efficiency[inv]->Show(show);
-        txt_temperature[inv]->Show(show);
-        txt_static[inv][2]->Show(show);
-        txt_static[inv][3]->Show(show);
-        txt_static[inv][4]->Show(show);
-        txt_static[inv][5]->Show(show);
-        txt_static[inv][6]->Show(show);
-        txt_static[inv][7]->Show(show);
-        txt_static[inv][8]->Show(show);
-        txt_static[inv][9]->Show(show);
-    }
-    if(type == 3)
+    for(ix=0; ix < N_EXTRA_READINGS; ix++)
     {
-        if(show == true)
+        if(extra_readings[ix].status_slot != 0)
         {
-            txt_energy[inv][0]->SetSize(x+24, 1, 53, 20);
-            txt_energy[inv][1]->SetSize(x+24, wxDefaultCoord, 53, 20);
-            txt_energy[inv][2]->SetSize(x+117, wxDefaultCoord, 53, 20);
-            txt_energy[inv][3]->SetSize(x+117, wxDefaultCoord, 53, 20);
-            txt_energy[inv][4]->SetSize(x+210, wxDefaultCoord, 53, 20);
-            txt_energy[inv][5]->SetSize(x+210, wxDefaultCoord, 53, 20);
-            txt_static[inv][10]->SetSize(x, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][11]->SetSize(x+79, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][12]->SetSize(x+79, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][13]->SetSize(x+172, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][14]->SetSize(x+172, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][15]->SetSize(x+265, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-            txt_static[inv][16]->SetSize(x+265, wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-        }
-
-        txt_energy[inv][0]->Show(show);
-        txt_energy[inv][1]->Show(show);
-        txt_energy[inv][2]->Show(show);
-        txt_energy[inv][3]->Show(show);
-        txt_energy[inv][4]->Show(show);
-        txt_energy[inv][5]->Show(show);
-        txt_static[inv][10]->Show(show);
-        txt_static[inv][11]->Show(show);
-        txt_static[inv][12]->Show(show);
-        txt_static[inv][13]->Show(show);
-        txt_static[inv][14]->Show(show);
-        txt_static[inv][15]->Show(show);
-        txt_static[inv][16]->Show(show);
-    }
-    if(type == 4)
-    {
-        // any extra readings ?
-        posn = 0;
-        for(ix=0; ix < N_EXTRA_READINGS; ix++)
-        {
-            if(extra_readings[ix].status_slot != 0)
-            {
-                txt_dsp_param[inv][posn]->SetSize(x+92*(posn/2), wxDefaultCoord, 46, 20);
-                txt_dsp_label[inv][posn]->SetSize(x+48+92*(posn/2), wxDefaultCoord, wxDefaultCoord, wxDefaultCoord);
-                label = wxString(extra_reading_types[extra_readings[ix].type].mnemonic, wxConvLocal);
-                label.Replace(_T("_"), _T(" "));
-                txt_dsp_label[inv][posn]->SetLabel(label);
-                txt_dsp_param[inv][posn]->Show(show);
-                txt_dsp_label[inv][posn]->Show(show);
-
-                extra_readings[ix].status_slot = posn+1;
-                posn++;
-            }
-        }
-        while(posn < N_EXTRA_READINGS)
-        {
-            txt_dsp_param[inv][posn]->Show(false);
-            txt_dsp_label[inv][posn]->Show(false);
+            label = wxString(extra_reading_types[extra_readings[ix].type].mnemonic, wxConvLocal);
+            label.Replace(_T("_"), _T(" "));
+            txt_dsp_label[inv][posn]->SetLabel(label);
+            extra_readings[ix].status_slot = posn+1;
             posn++;
         }
     }
-    if(type == 5)
+    while(posn < N_EXTRA_READINGS)
     {
-        if(show == true)
-        {
-            txt_energy[0][0]->SetSize(x,  1, 52, 20);
-            txt_energy[1][0]->SetSize(x, 23, 52, 20);
-        }
-        txt_energy[0][0]->Show(show);
-        txt_energy[1][0]->Show(show);
+        txt_dsp_param[inv][posn]->Show(false);
+        txt_dsp_label[inv][posn]->Show(false);
+        posn++;
     }
-}  // end of PlaceReadings
+}
 
 
 void Mainframe::SetupStatusPanel(int control)
@@ -282,66 +205,69 @@ void Mainframe::SetupStatusPanel(int control)
 
     style = chart_pages[graph_panel->page].status_type;
 
+    status_panel->Freeze();
+
+    // take out all the groups (Detach doesn't delete them), and then place the ones for this style
+    for(ix=0; ix<N_INV; ix++)
+    {
+        wxSizer *groups[4] = {sizer_power[ix], sizer_input[ix], sizer_energy[ix], sizer_extra[ix]};
+        for(int g=0; g<4; g++)
+        {
+            sizer_status->Detach(groups[g]);
+            groups[g]->ShowItems(false);
+        }
+    }
+    sizer_status->Detach(sizer_today);
+    sizer_today->ShowItems(false);
+
     if(inverter_address[1] == 0)
     {
         // only one inverter;
-        PlaceReadings(1, 0,   0, false);
-        PlaceReadings(1, 1,   0, false);
-        PlaceReadings(2, 0, 149, true);
-        PlaceReadings(2, 1,   0, false);
-        PlaceReadings(3, 0, 423, true);
-        PlaceReadings(3, 1,   0, false);
-        PlaceReadings(4, 0, 749, true);
-        PlaceReadings(4, 1,   0, false);
+        PlaceGroup(sizer_input[0]);
+        PlaceGroup(sizer_energy[0]);
+        PlaceExtraReadings(0);
+    }
+    else
+    if(style == 0)
+    {
+        // all
+        PlaceGroup(sizer_power[0]);
+        PlaceGroup(sizer_input[0]);
+        PlaceGroup(sizer_power[1]);
+        PlaceGroup(sizer_input[1]);
+        PlaceGroup(sizer_energy[0]);
+        PlaceGroup(sizer_energy[1]);
+        PlaceExtraReadings(0);
+    }
+    else
+    if(style == 1)
+    {
+        // some
+        PlaceGroup(sizer_power[0]);
+        PlaceGroup(sizer_input[0]);
+        PlaceGroup(sizer_power[1]);
+        PlaceGroup(sizer_input[1]);
+        PlaceGroup(sizer_today);
+        PlaceExtraReadings(0);
+    }
+    else
+    if(style == 2)
+    {
+        // inverter A
+        PlaceGroup(sizer_power[0]);
+        PlaceGroup(sizer_input[0]);
+        PlaceGroup(sizer_energy[0]);
+        PlaceGroup(sizer_power[1]);
+        PlaceExtraReadings(0);
     }
     else
     {
-        PlaceReadings(1, 0, 149, true);
-        if(style == 0)
-        {
-            // all
-            PlaceReadings(2, 0, 239, true);
-            PlaceReadings(1, 1, 518, true);
-            PlaceReadings(2, 1, 608, true);
-            PlaceReadings(3, 0, 887, true);
-            PlaceReadings(3, 1, 1207, true);
-            PlaceReadings(4, 0, 1527, true);
-            PlaceReadings(4, 1,   0, false);
-        }
-        if(style == 1)
-        {
-            // some
-            PlaceReadings(2, 0, 239, true);
-            PlaceReadings(1, 1, 509, true);
-            PlaceReadings(2, 1, 599, true);
-            PlaceReadings(3, 0,   0, false);
-            PlaceReadings(3, 1,   0, false);
-            PlaceReadings(4, 0, 931, true);
-            PlaceReadings(4, 1,   0, false);
-            PlaceReadings(5, 0, 861, true);
-        }
-        if(style == 2)
-        {
-            // inverter A
-            PlaceReadings(2, 0, 239, true);
-            PlaceReadings(1, 1, 831, true);
-            PlaceReadings(2, 1,   0, false);
-            PlaceReadings(3, 0, 511, true);
-            PlaceReadings(3, 1,   0, false);
-            PlaceReadings(4, 0, 931, true);
-            PlaceReadings(4, 1,   0, false);
-        }
-        if(style == 3)
-        {
-            // inverter B
-            PlaceReadings(2, 0,   0, false);
-            PlaceReadings(1, 1, 259, true);
-            PlaceReadings(2, 1, 349, true);
-            PlaceReadings(3, 0,   0, false);
-            PlaceReadings(3, 1, 611, true);
-            PlaceReadings(4, 0,   0, false);
-            PlaceReadings(4, 1, 931, true);
-        }
+        // inverter B
+        PlaceGroup(sizer_power[0]);
+        PlaceGroup(sizer_power[1]);
+        PlaceGroup(sizer_input[1]);
+        PlaceGroup(sizer_energy[1]);
+        PlaceExtraReadings(1);
     }
 
     for(ix=0; ix<2; ix++)
@@ -349,6 +275,46 @@ void Mainframe::SetupStatusPanel(int control)
         ShowEnergy(ix);
         txt_energy[ix][1]->ChangeValue(wxString::Format(_T("%d"), inverters[ix].peak));
     }
+
+    status_panel->Layout();
+    Layout();
+    status_panel->Thaw();
+    pulse_panel->Refresh();
+}
+
+
+// Size a text field to fit this sample of its contents, for the current font
+static void FitTextField(wxTextCtrl *text, const wxString &sample, int extra_height)
+{//=================================================================================
+    wxSize size = text->GetTextExtent(sample);
+    size.x += 2 * text->GetCharWidth();
+    size.y = text->GetCharHeight() + extra_height;
+    text->SetInitialSize(size);
+}
+
+
+static wxTextCtrl *NewField(wxWindow *parent, const wxString &sample)
+{//==================================================================
+    wxTextCtrl *text = new wxTextCtrl(parent, -1, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_READONLY | wxTE_CENTRE);
+    FitTextField(text, sample, 8);
+    return(text);
+}
+
+
+static wxTextCtrl *NewBigField(wxWindow *parent, wxFont &font, const wxString &sample)
+{//===================================================================================
+    wxTextCtrl *text = new wxTextCtrl(parent, -1, wxEmptyString, wxDefaultPosition, wxDefaultSize, TE_BIG | wxTE_READONLY | wxTE_CENTRE);
+    text->SetFont(font);
+    text->SetDefaultStyle(wxTextAttr(wxNullColour, wxNullColour, font));
+    FitTextField(text, sample, 10);
+    return(text);
+}
+
+
+static void AddField(wxSizer *grid, wxTextCtrl *field, wxStaticText *label)
+{//========================================================================
+    grid->Add(field, 0, wxALIGN_CENTER_VERTICAL);
+    grid->Add(label, 0, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 3);
 }
 
 
@@ -356,55 +322,111 @@ void Mainframe::MakeStatusPanel(void)
 {//==================================
     int ix;
     int inv;
-    int y;
+    wxFlexGridSizer *grid;
+    wxGridBagSizer *bag;
+    wxBoxSizer *box;
 
-    txt_powertot = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0,2), wxSize(116,42), TE_BIG | wxTE_READONLY | wxTE_CENTRE);
-    txt_powertot->SetDefaultStyle(wxTextAttr(wxNullColour, wxNullColour, font_big));
+    status_panel->SetFont(wxFont(9, wxFONTFAMILY_SWISS, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL));
+
+    // readings continue on another row if they don't fit across the window
+    sizer_status = new wxWrapSizer(wxHORIZONTAL, wxREMOVE_LEADING_SPACES);
+
+    txt_powertot = NewBigField(status_panel, font_big, _T("00000"));
+    sizer_status->Add(txt_powertot, 0, wxALIGN_CENTER_VERTICAL | wxALL, 2);
+
+    pulse_panel = new wxPanel(status_panel, -1, wxDefaultPosition, wxSize(PULSE_SIZE+1, 2*PULSE_SIZE + 6));
+    pulse_panel->SetBackgroundStyle(wxBG_STYLE_SYSTEM);
+    pulse_panel->Bind(wxEVT_PAINT, &OnPulsePaint);
+    sizer_status->Add(pulse_panel, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, DLG_GAP);
+
+    static const wxString energy_names[] = {_T("today"), _T("peakW"), _T("month"), _T("year"), _T("total"), _T("partial")};
 
     for(inv=0; inv<2; inv++)
     {
-        txt_power[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0,1), wxSize(82,HT_PW0), TE_BIG | wxTE_READONLY | wxTE_CENTRE);
-        txt_power[inv]->SetDefaultStyle(wxTextAttr(wxNullColour, wxNullColour, font_medium));
-        txt_static[inv][0] = new wxStaticText(status_panel, -1, _T(""), wxPoint(0, 33));
+        // power output of this inverter
+        txt_power[inv] = NewBigField(status_panel, font_medium, _T("00000"));
+        txt_static[inv][0] = new wxStaticText(status_panel, -1, _T("Inverter #000"));
+        box = new wxBoxSizer(wxVERTICAL);
+        box->Add(txt_power[inv], 0, wxALIGN_CENTER_HORIZONTAL);
+        box->Add(txt_static[inv][0], 0, wxALIGN_CENTER_HORIZONTAL);
+        sizer_power[inv] = box;
 
-        txt_power1[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 1), wxSize(46, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_power2[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 23), wxSize(46, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_volts1[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 1), wxSize(40, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_volts2[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 23), wxSize(40, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_current1[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 1), wxSize(40, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_current2[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 23), wxSize(40, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_efficiency[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 1), wxSize(40, 20), wxTE_READONLY | wxTE_CENTRE);
-        txt_temperature[inv] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, 23), wxSize(40, 20), wxTE_READONLY | wxTE_CENTRE);
+        // power, voltage and current of the inputs.  Efficiency and temperature
+        txt_power1[inv] = NewField(status_panel, _T("00000"));
+        txt_power2[inv] = NewField(status_panel, _T("00000"));
+        txt_volts1[inv] = NewField(status_panel, _T("0000"));
+        txt_volts2[inv] = NewField(status_panel, _T("0000"));
+        txt_current1[inv] = NewField(status_panel, _T("00.00"));
+        txt_current2[inv] = NewField(status_panel, _T("00.00"));
+        txt_efficiency[inv] = NewField(status_panel, _T("100.0"));
+        txt_temperature[inv] = NewField(status_panel, _T("100.0"));
 
-        txt_static[inv][2] = new wxStaticText(status_panel, -1, _T("W"), wxPoint(0, 4));
-        txt_static[inv][3] = new wxStaticText(status_panel, -1, _T("W"), wxPoint(0, 26));
-        txt_static[inv][4] = new wxStaticText(status_panel, -1, _T("V"), wxPoint(0, 4));
-        txt_static[inv][5] = new wxStaticText(status_panel, -1, _T("V"), wxPoint(0, 26));
-        txt_static[inv][6] = new wxStaticText(status_panel, -1, _T("A"), wxPoint(0, 4));
-        txt_static[inv][7] = new wxStaticText(status_panel, -1, _T("A"), wxPoint(0, 26));
-        txt_static[inv][8] = new wxStaticText(status_panel, -1, _T("%"), wxPoint(0, 4));
-        txt_static[inv][9] = new wxStaticText(status_panel, -1, _T("deg"), wxPoint(0, 26));
+        txt_static[inv][2] = new wxStaticText(status_panel, -1, _T("W"));
+        txt_static[inv][3] = new wxStaticText(status_panel, -1, _T("W"));
+        txt_static[inv][4] = new wxStaticText(status_panel, -1, _T("V"));
+        txt_static[inv][5] = new wxStaticText(status_panel, -1, _T("V"));
+        txt_static[inv][6] = new wxStaticText(status_panel, -1, _T("A"));
+        txt_static[inv][7] = new wxStaticText(status_panel, -1, _T("A"));
+        txt_static[inv][8] = new wxStaticText(status_panel, -1, _T("%"));
+        txt_static[inv][9] = new wxStaticText(status_panel, -1, _T("deg"));
 
-        txt_static[inv][10] = new wxStaticText(status_panel, -1, _T("kWh"), wxPoint(0, 4));
+        grid = new wxFlexGridSizer(8, 2, 2);
+        AddField(grid, txt_power1[inv], txt_static[inv][2]);
+        AddField(grid, txt_volts1[inv], txt_static[inv][4]);
+        AddField(grid, txt_current1[inv], txt_static[inv][6]);
+        AddField(grid, txt_efficiency[inv], txt_static[inv][8]);
+        AddField(grid, txt_power2[inv], txt_static[inv][3]);
+        AddField(grid, txt_volts2[inv], txt_static[inv][5]);
+        AddField(grid, txt_current2[inv], txt_static[inv][7]);
+        AddField(grid, txt_temperature[inv], txt_static[inv][9]);
+        sizer_input[inv] = grid;
+
+        // energy totals
+        txt_static[inv][10] = new wxStaticText(status_panel, -1, _T("kWh"));
         for(ix=0; ix<6; ix++)
         {
-            static const wxString energy_names[] = {_T("today"), _T("peakW"), _T("month"), _T("year"), _T("total"), _T("partial")};
-            y = 1;
-            if(ix & 1)
-                y = 23;
-            txt_energy[inv][ix] = new wxTextCtrl(status_panel, -1, _T(""), wxPoint(0, y), wxSize(46, 20), wxTE_READONLY | wxTE_CENTRE);
-            txt_static[inv][ix+11] = new wxStaticText(status_panel, -1, energy_names[ix], wxPoint(0, y+3));
-       }
+            txt_energy[inv][ix] = NewField(status_panel, _T("000000.0"));
+            txt_static[inv][ix+11] = new wxStaticText(status_panel, -1, energy_names[ix]);
+        }
+        grid = new wxFlexGridSizer(7, 2, 2);
+        grid->Add(txt_static[inv][10], 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 3);
+        for(ix=0; ix<6; ix+=2)
+            AddField(grid, txt_energy[inv][ix], txt_static[inv][ix+11]);
+        grid->AddSpacer(1);
+        for(ix=1; ix<6; ix+=2)
+            AddField(grid, txt_energy[inv][ix], txt_static[inv][ix+11]);
+        sizer_energy[inv] = grid;
 
+        // extra readings, placed in columns of two
+        bag = new wxGridBagSizer(2, 2);
         for(ix=0; ix<N_EXTRA_READINGS; ix++)
         {
-            y = 1;
-            if(ix & 1)
-                y = 23;
-            txt_dsp_param[inv][ix] = new wxTextCtrl(status_panel, -1, wxEmptyString,  wxPoint(0, y), wxSize(46, 20), wxTE_READONLY | wxTE_CENTRE);
-            txt_dsp_label[inv][ix] = new wxStaticText(status_panel, -1, wxEmptyString, wxPoint(0, y+3));
+            txt_dsp_param[inv][ix] = NewField(status_panel, _T("0000.00"));
+            txt_dsp_label[inv][ix] = new wxStaticText(status_panel, -1, _T("Grid Hz"));
+            bag->Add(txt_dsp_param[inv][ix], wxGBPosition(ix & 1, (ix/2)*2), wxDefaultSpan, wxALIGN_CENTER_VERTICAL);
+            bag->Add(txt_dsp_label[inv][ix], wxGBPosition(ix & 1, (ix/2)*2 + 1), wxDefaultSpan, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, 3);
         }
+        sizer_extra[inv] = bag;
     }
 
-}  // end of MakeStatusPanal
+    // today's energy of both inverters
+    grid = new wxFlexGridSizer(2, 2, 2);
+    for(inv=0; inv<2; inv++)
+    {
+        txt_today[inv] = NewField(status_panel, _T("000.000"));
+        AddField(grid, txt_today[inv], new wxStaticText(status_panel, -1, _T("kWh")));
+    }
+    sizer_today = grid;
 
+    // each group needs a place in the sizer, SetupStatusPanel() arranges them
+    for(inv=0; inv<2; inv++)
+    {
+        sizer_status->Add(sizer_power[inv]);
+        sizer_status->Add(sizer_input[inv]);
+        sizer_status->Add(sizer_energy[inv]);
+        sizer_status->Add(sizer_extra[inv]);
+    }
+    sizer_status->Add(sizer_today);
+
+    status_panel->SetSizer(sizer_status);
+}  // end of MakeStatusPanal

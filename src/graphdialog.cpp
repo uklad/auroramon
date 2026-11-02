@@ -360,7 +360,7 @@ void SetExtraReadings(wxString string)
     int x[8];
     char buf[200];
 
-    strcpy(buf, string.mb_str(wxConvLocal));
+    strncpy0(buf, string.mb_str(wxConvLocal), sizeof(buf));
     n = sscanf(buf, "%d %d %d %d %d %d %d %d", &x[0], &x[1], &x[2], &x[3], &x[4], &x[5], &x[6], &x[7]);
 
     n_extra_readings = 0;
@@ -379,7 +379,7 @@ void SetExtraReadings(wxString string)
                 extra_readings[n_extra_readings].status_slot = 0;
                 if(flags & 1)
                 {
-                    extra_readings[ix].graph_slot = AddExtraReading(j);
+                    extra_readings[n_extra_readings].graph_slot = AddExtraReading(j);
                 }
                 if(flags & 2)
                 {
@@ -403,13 +403,11 @@ END_EVENT_TABLE()
 
 
 DlgExtraR::DlgExtraR(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Extra Readings"), wxPoint(200, 150), wxSize(320,320+DLG_HX))
+    : wxDialog(parent, -1, _T("Extra Readings"), wxPoint(200, 150))
 {//=================================
-    int x;
-    int y;
     int ix;
-    x = 160;
-    y = 20;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(3, DLG_GAP/2, 2*DLG_GAP);
 
     ExtraRNames.Clear();
     for(ix=0; extra_reading_types[ix].name != NULL; ix++)
@@ -417,31 +415,29 @@ DlgExtraR::DlgExtraR(wxWindow *parent)
         ExtraRNames.Add(wxString(extra_reading_types[ix].name, wxConvLocal));
     }
 
-    new wxStaticText(this, -1, _T("Reading"), wxPoint(8, y));
-    new wxStaticText(this, -1, _T("Graph"), wxPoint(x, y));
-    new wxStaticText(this, -1, _T("Numeric"), wxPoint(x+50, y));
+    AddGridLabel(this, grid, _T("Reading"));
+    grid->Add(new wxStaticText(this, -1, _T("Graph")), 0, wxALIGN_CENTER);
+    grid->Add(new wxStaticText(this, -1, _T("Numeric")), 0, wxALIGN_CENTER);
 
-    y = 38;
     for(ix=0; ix < N_EXTRA_READINGS; ix++)
     {
-        t_type[ix] = new wxChoice(this, -1, wxPoint(8, y+2), wxDefaultSize, ExtraRNames);
+        t_type[ix] = new wxChoice(this, -1, wxDefaultPosition, wxDefaultSize, ExtraRNames);
         t_type[ix]->SetSelection(0);
-#ifdef __WXMSW__
-        t_graph[ix] = new wxCheckBox(this, -1, wxEmptyString, wxPoint(x+6, y+6));
-        t_numeric[ix] = new wxCheckBox(this, -1, wxEmptyString, wxPoint(x+56, y+6));
-#else
-        t_graph[ix] = new wxCheckBox(this, -1, wxEmptyString, wxPoint(x+6, y));
-        t_numeric[ix] = new wxCheckBox(this, -1, wxEmptyString, wxPoint(x+56, y));
-#endif
-        y += 28;
+        t_graph[ix] = new wxCheckBox(this, -1, wxEmptyString);
+        t_numeric[ix] = new wxCheckBox(this, -1, wxEmptyString);
+
+        grid->Add(t_type[ix], 0, wxEXPAND);
+        grid->Add(t_graph[ix], 0, wxALIGN_CENTER);
+        grid->Add(t_numeric[ix], 0, wxALIGN_CENTER);
     }
 
-
-    y = 280;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(130,y));
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(220,y));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
 
+    top->Add(grid, 1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
 }
 
 void DlgExtraR::ShowDlg()
@@ -472,6 +468,8 @@ void DlgExtraR::OnButton(wxCommandEvent &event)
     id = event.GetId();
     if(id == dlgOK)
     {
+        wxMutexLocker lock(comms_mutex);   // the inverter thread reads extra_readings
+
         n_extra_readings = 0;
         for(ix=0; ix < N_EXTRA_READINGS; ix++)
         {
@@ -605,8 +603,8 @@ int LoadCharts(const wxString fname)
         linenum++;
         if(memcmp(buf, "Page ", 5) == 0)
         {
-            n = sscanf(&buf[5], "%x %d %d %s", &flags, &status_type, &spare, name);
-            if(n == 4)
+            n = sscanf(&buf[5], "%x %d %d %79s", &flags, &status_type, &spare, name);
+            if((n == 4) && (page < N_PAGES) && (status_type >= 0) && (status_type <= 3))
             {
                 gnum = 0;
                 cpage = &chart_pages[page++];
@@ -631,14 +629,14 @@ int LoadCharts(const wxString fname)
         if(isalpha(buf[0]))
         {
             // a graph within a page
-            if(cpage == NULL)
+            if((cpage == NULL) || (gnum >= N_PAGE_GRAPHS))
             {
                 error = linenum;
                 break;
             }
             g = &cpage->graph[gnum];
-            n = sscanf(buf, "%s %d %d %d %x %d %d", name, &inverter, &scaletype, &style, &colour, &base, &top);
-            if(n != 7)
+            n = sscanf(buf, "%79s %d %d %d %x %d %d", name, &inverter, &scaletype, &style, &colour, &base, &top);
+            if((n != 7) || (inverter < 0) || (inverter >= N_INV) || (scaletype < 0) || (scaletype > gBACKG) || (style < 0) || (style > gHATCH))
             {
                 error = linenum;
                 break;
@@ -674,7 +672,7 @@ int LoadCharts(const wxString fname)
     }
     fclose(f);
 
-    return(error);
+    return(error);   // the caller uses the default pages if this isn't zero
 }
 
 
@@ -711,10 +709,15 @@ void MakeInverterNames(int control)
 
 
 DlgChart::DlgChart(wxWindow *parent)
-    : wxDialog(parent, -1, _T("Charts Settings"), wxDefaultPosition, wxSize(600,290+DLG_HX))
+    : wxDialog(parent, -1, _T("Charts Settings"))
 {//==============================================
-    int x, y;
     int ix;
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxBoxSizer *page_row = new wxBoxSizer(wxHORIZONTAL);
+    wxBoxSizer *middle = new wxBoxSizer(wxHORIZONTAL);
+    wxBoxSizer *page_buttons = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(7, DLG_GAP/2, DLG_GAP);
+    const int flags_hidden = wxRESERVE_SPACE_EVEN_IF_HIDDEN | wxALIGN_CENTER_VERTICAL;
 
     MakeInverterNames(0);
 
@@ -743,54 +746,86 @@ DlgChart::DlgChart(wxWindow *parent)
     for(ix=0; ix<16; ix++)
         ChartPalette.SetCustomColour(ix, palette_colours[ix]);
 
-
-    y = 20;
-    new wxStaticText(this, -1, _T("Page number"), wxPoint(8, y+3));
-    t_pagenum = new wxSpinCtrl(this, idPageSpin, wxEmptyString, wxPoint(82, y-1), wxSize(50, 22), wxSP_ARROW_KEYS, 1, N_PAGES, 1);
+    t_pagenum = new wxSpinCtrl(this, idPageSpin, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxSP_ARROW_KEYS, 1, N_PAGES, 1);
     cpage = &chart_pages[0];
-    t_pagename = new wxTextCtrl(this, idPageName, wxString(cpage->name, wxConvLocal), wxPoint(140, y), wxSize(200, 20), wxTE_PROCESS_ENTER);
-    new wxStaticText(this, -1, _T("Status bar"), wxPoint(351, y+3));
-    t_statustype = new wxChoice(this, idStatusType, wxPoint(410, y-1), wxDefaultSize, StatusNames);
-    new wxStaticText(this, -1, _T("Backg"), wxPoint(487, y+3));
-    t_back_colour = new wxChoice(this, idBackColour, wxPoint(523, y-1), wxDefaultSize, N_BACK_COLOURS, BackColours);
+    t_pagename = new wxTextCtrl(this, idPageName, wxString(cpage->name, wxConvLocal), wxDefaultPosition, wxSize(220, -1), wxTE_PROCESS_ENTER);
+    t_statustype = new wxChoice(this, idStatusType, wxDefaultPosition, wxDefaultSize, StatusNames);
+    t_back_colour = new wxChoice(this, idBackColour, wxDefaultPosition, wxDefaultSize, N_BACK_COLOURS, BackColours);
 
-    y = 62;
-    new wxStaticText(this, -1, _T("Inverter"), wxPoint(140, y));
-    new wxStaticText(this, -1, _T("Colour"), wxPoint(195, y));
-    new wxStaticText(this, -1, _T("Min"), wxPoint(247, y));
-    new wxStaticText(this, -1, _T("Max"), wxPoint(297, y));
-    new wxStaticText(this, -1, _T("Scale"), wxPoint(346, y));
-    new wxStaticText(this, -1, _T("Style"), wxPoint(415, y));
+    page_row->Add(new wxStaticText(this, -1, _T("Page number")), 0, wxALIGN_CENTER_VERTICAL);
+    page_row->Add(t_pagenum, 0, wxLEFT, DLG_GAP);
+    page_row->Add(t_pagename, 1, wxLEFT | wxEXPAND, DLG_GAP);
+    page_row->Add(new wxStaticText(this, -1, _T("Status bar")), 0, wxLEFT | wxALIGN_CENTER_VERTICAL, 2*DLG_GAP);
+    page_row->Add(t_statustype, 0, wxLEFT, DLG_GAP);
+    page_row->Add(new wxStaticText(this, -1, _T("Background")), 0, wxLEFT | wxALIGN_CENTER_VERTICAL, 2*DLG_GAP);
+    page_row->Add(t_back_colour, 0, wxLEFT, DLG_GAP);
 
-    y = 82;
+    grid->AddSpacer(1);
+    grid->Add(new wxStaticText(this, -1, _T("Inverter")), 0, wxALIGN_CENTER);
+    grid->Add(new wxStaticText(this, -1, _T("Colour")), 0, wxALIGN_CENTER);
+    grid->Add(new wxStaticText(this, -1, _T("Min")), 0, wxALIGN_CENTER);
+    grid->Add(new wxStaticText(this, -1, _T("Max")), 0, wxALIGN_CENTER);
+    grid->Add(new wxStaticText(this, -1, _T("Scale")), 0, wxALIGN_CENTER);
+    grid->Add(new wxStaticText(this, -1, _T("Style")), 0, wxALIGN_CENTER);
+
+    // The fields of a graph all exist from the start, BuildGraphFields() shows the relevant ones
     for(ix=0; ix<N_PAGE_GRAPHS; ix++)
     {
-        gfields[ix].t_graphtype = new wxChoice(this, idGraphA_1+ix, wxPoint(8, y), wxDefaultSize, GraphTypes);
-        y += 32;
+        GRAPHFIELDS *gf = &gfields[ix];
+        wxBoxSizer *inv_cell = new wxBoxSizer(wxHORIZONTAL);
+
+        gf->t_graphtype = new wxChoice(this, idGraphA_1+ix, wxDefaultPosition, wxDefaultSize, GraphTypes);
+        gf->t_inv = new wxChoice(this, idGraphB_1+ix, wxDefaultPosition, wxDefaultSize, InverterNames);
+        gf->t_text_ptot = new wxStaticText(this, -1, _T("hidden"));
+        gf->t_colour = new wxButton(this, idGraphA_1+ix, wxEmptyString, wxDefaultPosition, wxSize(60, -1));
+        gf->t_base = new wxTextCtrl(this, idGraphA_1+ix, wxEmptyString, wxDefaultPosition, wxSize(80, -1), wxTE_PROCESS_ENTER);
+        gf->t_top = new wxTextCtrl(this, idGraphB_1+ix, wxEmptyString, wxDefaultPosition, wxSize(80, -1), wxTE_PROCESS_ENTER);
+        gf->t_scaletype = new wxChoice(this, idGraphC_1+ix, wxDefaultPosition, wxDefaultSize, ScaleNames);
+        gf->t_style = new wxChoice(this, idGraphD_1+ix, wxDefaultPosition, wxDefaultSize, StyleNames);
+
+        inv_cell->Add(gf->t_inv, 0, wxALIGN_CENTER_VERTICAL);
+        inv_cell->Add(gf->t_text_ptot, 0, wxALIGN_CENTER_VERTICAL);
+
+        grid->Add(gf->t_graphtype, 0, wxEXPAND);
+        grid->Add(inv_cell, 0, wxALIGN_CENTER);
+        grid->Add(gf->t_colour, 0, flags_hidden | wxEXPAND);
+        grid->Add(gf->t_base, 0, flags_hidden);
+        grid->Add(gf->t_top, 0, flags_hidden);
+        grid->Add(gf->t_scaletype, 0, flags_hidden);
+        grid->Add(gf->t_style, 0, flags_hidden);
     }
 
-    y = 250;
-    x = 326;
-    button_OK = new wxButton(this, dlgOK, _T("OK"), wxPoint(x,y));
-    button_OK->SetDefault();
-    button_Accept = new wxButton(this, dlgAccept, _T("Accept"), wxPoint(x+90,y));
-    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"), wxPoint(x+180,y));
+    button_Insert = new wxButton(this, dlgInsert, _T("Insert Page"));
+    button_Delete = new wxButton(this, dlgDelete, _T("Delete Page"));
+    button_Default = new wxButton(this, dlgDefault, _T("Defaults"));
+    page_buttons->Add(button_Insert, 0, wxEXPAND);
+    page_buttons->Add(button_Delete, 0, wxEXPAND | wxTOP, DLG_GAP);
+    page_buttons->Add(button_Default, 0, wxEXPAND | wxTOP, 3*DLG_GAP);
 
-    y = 82;
-    x = 506;
-    button_Insert = new wxButton(this, dlgInsert, _T("Insert Page"), wxPoint(x,y));
-    button_Delete = new wxButton(this, dlgDelete, _T("Delete Page"), wxPoint(x,y+32));
-    button_Default = new wxButton(this, dlgDefault, _T("Defaults"), wxPoint(x,y+100));
+    middle->Add(grid, 1);
+    middle->Add(page_buttons, 0, wxLEFT, 3*DLG_GAP);
+
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
+    button_OK->SetDefault();
+    button_Accept = new wxButton(this, dlgAccept, _T("Accept"));
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
+
+    top->Add(page_row, 0, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(middle, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Accept, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizer(top);
 
     fname_chartinfo = data_system_dir + _T("/chartinfo");
     page = 0;
     ShowPage(page);
+    Fit();
 }
 
 void DlgChart::ShowDlg()
 {//=====================
     memcpy(chart_pages_copy, chart_pages, sizeof(chart_pages_copy));
     ShowPage(graph_panel->page);
+    Fit();   // the list of graph types may have changed
     Show();
 }
 
@@ -799,73 +834,39 @@ void DlgChart::ShowDlg()
 void DlgChart::BuildGraphFields(int gnum)
 {//======================================
     int gtype;
-    int x, y;
     int ix;
-    wxString string;
+    bool in_use;
+    bool power_total;
     GRAPHFIELDS *gf;
 
-    MakeInverterNames(0);
-
     gf = &gfields[gnum];
-    gtype = gfields[gnum].t_graphtype->GetSelection();
-
-    // delete all the fields except graph-type
-    delete gf->t_inv;
-    delete gf->t_colour;
-    delete gf->t_base;
-    delete gf->t_top;
-    delete gf->t_scaletype;
-    delete gf->t_style;
-    delete gf->t_text_ptot;
-    gf->t_inv = NULL;
-    gf->t_colour = NULL;
-    gf->t_base = NULL;
-    gf->t_top = NULL;
-    gf->t_scaletype = NULL;
-    gf->t_style = NULL;
-    gf->t_text_ptot = NULL;
+    gtype = gf->t_graphtype->GetSelection();
 
     gf->t_graphtype->Clear();
     gf->t_graphtype->Append(GraphTypes);
     gf->t_graphtype->SetSelection(gtype);
 
-    if(gtype == 0)
-        return;  // not in use
-
-    y = 82 + gnum*32;
-
-    x = 140;
-    if(gtype == g_PowerTotal)
-    {
-        if(inverter_address[1] == 0)
-        {
-            gf->t_text_ptot = new wxStaticText(this, -1, _T("hidden"), wxPoint(x+3, y+4));
-        }
-    }
-    else
-    if(graph_types[gtype].per_inverter == 1)
-    {
-        gf->t_inv = new wxChoice(this, idGraphB_1+gnum, wxPoint(x, y), wxDefaultSize, InverterNames);
-        gf->t_inv->SetSelection(cpage->graph[gnum].inverter);
-    }
-
-    x += 50;
-#ifdef __WXMSW__
-    gf->t_colour = new wxButton(this, idGraphA_1+gnum, wxEmptyString, wxPoint(x, y+2), wxSize(47, 20));
-#else
-    gf->t_colour = new wxButton(this, idGraphA_1+gnum, wxEmptyString, wxPoint(x, y+1), wxSize(47, 22));
-#endif
+    gf->t_inv->SetSelection(cpage->graph[gnum].inverter);
     gf->t_colour->SetBackgroundColour(wxColour(cpage->graph[gnum].colour));
-    x += 50;
-    gf->t_base = new wxTextCtrl(this, idGraphA_1+gnum, wxString::Format(_T("%d"), cpage->graph[gnum].base), wxPoint(x, y+2), wxSize(47, 20), wxTE_PROCESS_ENTER);
-    x += 50;
-    gf->t_top = new wxTextCtrl(this, idGraphB_1+gnum, wxString::Format(_T("%d"), cpage->graph[gnum].top), wxPoint(x, y+2), wxSize(47, 20), wxTE_PROCESS_ENTER);
-    x += 50;
-    gf->t_scaletype = new wxChoice(this, idGraphC_1+gnum, wxPoint(x, y), wxDefaultSize, ScaleNames);
+    gf->t_base->ChangeValue(wxString::Format(_T("%d"), cpage->graph[gnum].base));
+    gf->t_top->ChangeValue(wxString::Format(_T("%d"), cpage->graph[gnum].top));
     gf->t_scaletype->SetSelection(cpage->graph[gnum].scaletype);
-    x += 68;
-    gf->t_style = new wxChoice(this, idGraphD_1+gnum, wxPoint(x, y), wxDefaultSize, StyleNames);
     gf->t_style->SetSelection(cpage->graph[gnum].style);
+
+    in_use = (gtype != 0);
+    power_total = (gtype == g_PowerTotal);
+
+    gf->t_inv->Show(in_use && !power_total && (graph_types[gtype].per_inverter == 1));
+    gf->t_text_ptot->Show(power_total && (inverter_address[1] == 0));
+    gf->t_colour->Show(in_use);
+    gf->t_base->Show(in_use);
+    gf->t_top->Show(in_use);
+    gf->t_scaletype->Show(in_use);
+    gf->t_style->Show(in_use);
+    Layout();
+
+    if(in_use == false)
+        return;
 
     cpage->flags &= ~gINUSE;
     for(ix=0; ix<N_PAGE_GRAPHS; ix++)
@@ -1056,7 +1057,7 @@ void DlgChart::OnButton(wxCommandEvent &event)
 
         if(SaveCharts(fname_chartinfo) != 0)
         {
-            wxLogError(_T("Can't save to: ") + fname_chartinfo);
+            wxLogError(_T("Can't save to: %s"), fname_chartinfo);
         }
         break;
 
@@ -1089,7 +1090,8 @@ void DlgChart::OnButton(wxCommandEvent &event)
         break;
 
     case dlgDefault:
-        wxRenameFile(fname_chartinfo, fname_chartinfo + _T("_backup"), true);
+        if(wxFileExists(fname_chartinfo))
+            wxRenameFile(fname_chartinfo, fname_chartinfo + _T("_backup"), true);
         memcpy(chart_pages, chart_pages_default, sizeof(chart_pages));
         ShowPage(page);
         break;

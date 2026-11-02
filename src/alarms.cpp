@@ -306,20 +306,27 @@ static const wxString labels[5] = {_T("Global state"), _T("Inverter state"), _T(
 DlgAlarms::DlgAlarms(wxWindow *parent)
     : wxDialog(parent, -1, _T("Inverter Status"), wxPoint(0, 116), wxSize(320,280+DLG_HX))
 {//====================================
-    int x, y;
+    int x = 0;
+    int y;
     int inv;
     int ix;
 
-    x = 100;
+    // leave room for the longest label
+    for(ix=0; ix<5; ix++)
+    {
+        if(GetTextExtent(labels[ix]).GetWidth() > x)
+            x = GetTextExtent(labels[ix]).GetWidth();
+    }
+    x += 20;
     y = 0;
 
     for(inv=0; inv < 2; inv++)
     {
-        inverter_name[inv] = new wxStaticText(this, -1, wxEmptyString, wxPoint(0, 0));
+        inverter_name[inv] = new wxStaticText(this, -1, wxEmptyString, wxPoint(4, 0));
         for(ix=0; ix<5; ix++)
         {
             label[inv][ix] = new wxStaticText(this, -1, labels[ix], wxPoint(8, y));
-            message[inv][ix] = new wxStaticText(this, -1, wxEmptyString, wxPoint(x, y), wxSize(100, 200));
+            message[inv][ix] = new wxStaticText(this, -1, wxEmptyString, wxPoint(x, y));
             y += 16;
         }
     }
@@ -334,17 +341,19 @@ void DlgAlarms::Layout(int which_inverter)
     int ix;
     int inv;
     int show[2];
+    const int line = GetCharHeight() + 4;
+
+    Move(0, 116);
 
     if(inverter_address[1] == 0)
     {
         // only one inverter
-        SetSize(0, 116, 320, 86+DLG_HX);
-        y =4;
+        y = 4;
         for(ix=0; ix<5; ix++)
         {
-            label[0][ix]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-            message[0][ix]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-            y += 16;
+            label[0][ix]->Move(wxDefaultCoord, y);
+            message[0][ix]->Move(wxDefaultCoord, y);
+            y += line;
 
             label[0][ix]->Show(true);
             message[0][ix]->Show(true);
@@ -353,6 +362,7 @@ void DlgAlarms::Layout(int which_inverter)
         }
         inverter_name[0]->Show(false);
         inverter_name[1]->Show(false);
+        SetClientSize(320, y + 4);
         return;
     }
 
@@ -365,58 +375,26 @@ void DlgAlarms::Layout(int which_inverter)
         inverter_name[inv]->Show(true);
     }
 
-    if(show[0] && show[1])
-        SetSize(0, 116, 320, 119+DLG_HX);
-    else
-        SetSize(0, 116, 320, 114+DLG_HX);
-
-    y = 0;
-    inverter_name[0]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-    y += 16;
-    if(show[0])
+    y = 4;
+    for(inv=0; inv<2; inv++)
     {
+        inverter_name[inv]->Move(wxDefaultCoord, y);
+        y += line;
         for(ix=0; ix<5; ix++)
         {
-            label[0][ix]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-            message[0][ix]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-            y += 16;
-
-            label[0][ix]->Show(true);
-            message[0][ix]->Show(true);
+            label[inv][ix]->Show(show[inv] != 0);
+            message[inv][ix]->Show(show[inv] != 0);
+            if(show[inv])
+            {
+                label[inv][ix]->Move(wxDefaultCoord, y);
+                message[inv][ix]->Move(wxDefaultCoord, y);
+                y += line;
+            }
         }
-        y += 4;
+        if(show[inv])
+            y += 4;
     }
-    else
-    {
-        for(ix=0; ix<5; ix++)
-        {
-            label[0][ix]->Show(false);
-            message[0][ix]->Show(false);
-        }
-    }
-
-    inverter_name[1]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-    if(show[1])
-    {
-        y += 16;
-        for(ix=0; ix<5; ix++)
-        {
-            label[1][ix]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-            message[1][ix]->SetSize(wxDefaultCoord, y, wxDefaultCoord, wxDefaultCoord);
-            y += 16;
-
-            label[1][ix]->Show(true);
-            message[1][ix]->Show(true);
-        }
-    }
-    else
-    {
-        for(ix=0; ix<5; ix++)
-        {
-            label[1][ix]->Show(false);
-            message[1][ix]->Show(false);
-        }
-    }
+    SetClientSize(320, y + 4);
 }
 
 
@@ -596,8 +574,11 @@ void GotInverterStatus(int inv)
 void ShowInverterStatus()
 {//======================
     dlg_alarms->Layout(3);
-    DisplayState(0);
-    DisplayState(1);
+    {
+        wxMutexLocker lock(comms_mutex);   // the inverter thread updates the state
+        DisplayState(0);
+        DisplayState(1);
+    }
 
     keep_alarm_display = 1;  // don't remove the display automatically
     dlg_alarms->Show(true);
@@ -614,7 +595,7 @@ void PruneAlarmFile(int inv)
     int skip;
     char buf[200];
 
-    fname = data_system_dir + wxString::Format(_T("/alarms%d_%d.txt"), inverter_address[inv]);
+    fname = data_system_dir + wxString::Format(_T("/alarms%d_%d.txt"), inv, inverter_address[inv]);
     if((f_in = fopen(fname.mb_str(wxConvLocal), "r")) == NULL)
         return;
 

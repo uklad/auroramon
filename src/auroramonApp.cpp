@@ -54,6 +54,16 @@ void ConfigInit()
     wxString string;
     wxFileConfig *pConfig = new wxFileConfig(_T("aurora"));
 	wxFileConfig::Set(pConfig);
+#ifndef __WXMSW__
+	// This file contains the PVOutput API key.
+	// The umask covers a new file, a rewrite keeps the permissions of an existing one.
+	pConfig->SetUmask(0077);
+	{
+		wxString fname_config = wxFileConfig::GetLocalFile(_T("aurora")).GetFullPath();
+		if(wxFileExists(fname_config))
+			chmod(fname_config.mb_str(wxConvLocal), S_IRUSR | S_IWUSR);
+	}
+#endif
 #ifdef __WXMSW__
 	pConfig->Read(_T("/data"), &data_dir, path_home+_T("\\aurora"));
 	pConfig->Read(_T("/serial_port"),&serial_port,_T("COM1"));
@@ -79,7 +89,10 @@ void ConfigInit()
     SetExtraReadings(string);
 
     pConfig->SetPath(_T("/pvoutput"));
-    pConfig->Read(_T("url"), &pvoutput.url, _T("http://pvoutput.org/service/r2/"));
+    pConfig->Read(_T("url"), &pvoutput.url, _T("https://pvoutput.org/service/r2/"));
+    // earlier versions defaulted to unencrypted http
+    if(pvoutput.url.StartsWith(_T("http://pvoutput.org/")) || pvoutput.url.StartsWith(_T("http://www.pvoutput.org/")))
+        pvoutput.url.replace(0, 4, _T("https"));
     pConfig->Read(_T("systemid"), &pvoutput.sid, wxEmptyString);
     pConfig->Read(_T("apikey"), &pvoutput.key, wxEmptyString);
     pConfig->Read(_T("live_updates"), &pvoutput.live_updates, (long)0);
@@ -93,6 +106,7 @@ void ConfigInit()
         else
             inverter_address[inv] = pConfig->Read(_T("address"), (long)0);
         inverters[inv].auto_retrieve = pConfig->Read(_T("auto_retrieve"), (long)0);
+        inverters[inv].auto_set_time = pConfig->Read(_T("auto_set_time"), (long)0);
         pConfig->Read(_T("today"), &string, _T(""));
         strncpy0(inverters[inv].today_done, string.mb_str(wxConvLocal), sizeof(inverters[inv].today_done));
         pConfig->Read(_T("previous_total"), &(inverters[inv].previous_total), 0);
@@ -146,7 +160,7 @@ void ConfigSave(int control)
             if(extra_readings[ix].status_slot > 0)
                 value += 2000;
         }
-        string += wxString::Format(_T("%d "), value);
+        string += wxString::Format(_T("%ld "), value);
     }
     pConfig->Write(_T("/extra_readings"), string);
     pConfig->SetPath(_T("/pvoutput"));
@@ -161,6 +175,7 @@ void ConfigSave(int control)
 	    pConfig->SetPath(wxString::Format(_T("/inverter%d"), inv));
         pConfig->Write(_T("address"),inverter_address[inv]);
         pConfig->Write(_T("auto_retrieve"), inverters[inv].auto_retrieve);
+        pConfig->Write(_T("auto_set_time"), inverters[inv].auto_set_time);
         pConfig->Write(_T("today"), wxString(inverters[inv].today_done, wxConvLocal));
         if(inverter_address[inv] == 0)
         {

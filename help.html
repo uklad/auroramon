@@ -99,9 +99,8 @@ Run the installer:  <B>setup_auroramon.exe</B>.
 You will need to have the <B>wxWidgets</B> libraries installed on your computer.
 </P>
 <P>
-For Debian, Ubuntu and similar distributions, you need package <B>libwxgtk2.8-0</B> to run
-the <B>Aurora Monitor</B> program.  You will also need package <B>libwxgtk2.8-dev</B> to
-compile it from the program source code.
+For Debian, Ubuntu and similar distributions, you need package <B>libwxgtk3.2-dev</B> to
+compile the <B>Aurora Monitor</B> program from the source code (it requires wxWidgets 3.1.5 or later).
 </P>
 <P>
 Alternatively, wxWidgets is available from <A HREF="http://www.wxwidgets.org">www.wxwidgets.org</A>.
@@ -221,7 +220,7 @@ within the <B>Aurora Monitor</B> program.
 
 <P>
 Aurora monitor can send regular data updates to the <A HREF="http://pvoutput.org">http://pvoutput.org</A> website. 
-The default URL is for sending data <A HREF="http://pvoutput.org/service/r2/">http://pvoutput.org/service/r2/</A> which needs a <B>System Id</B> and <B>API Key</B>
+The default URL is for sending data <A HREF="https://pvoutput.org/service/r2/">https://pvoutput.org/service/r2/</A> which needs a <B>System Id</B> and <B>API Key</B>
 to gain access.
 </P>
 <P>
@@ -254,6 +253,13 @@ This displays:
 
 <A NAME="toc12"></A>
 <H3>Set inverter time</H3>
+<P>
+The inverter's clock shows local time, and it doesn't change for daylight saving by itself.
+<B>Settings-&gt;Inverter</B> has an option to sync it to computer time every hour, 6 hours, day or week
+(the default is Never).  When this is on, it also syncs at program start and when daylight saving starts or ends.
+A difference of 5 seconds or less is left alone. A difference of more than 26 hours is not changed, it may mean that
+the computer's clock is wrong, and is reported in the <B>Message log</B>.
+</P>
 
 <P>
 This displays the current computer time and inverter time.  It allows the inverter time to be set to either
