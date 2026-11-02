@@ -19,6 +19,7 @@ jobs:
           msystem: UCRT64
           update: false
           install: >-
+            git
             make
             zip
             mingw-w64-ucrt-x86_64-gcc
@@ -34,12 +35,12 @@ jobs:
 
       - name: Make the package
         run: |
-          short=$(git rev-parse --short HEAD)
+          short=${GITHUB_SHA:0:7}
           name=auroramon-1.08-windows-x64-$short
           dist=dist/$name
           mkdir -p "$dist/licenses"
           cp src/auroramon.exe help.html License.txt README.txt "$dist/"
-          git archive --format=zip -o "$dist/auroramon-source.zip" HEAD
+          git -c safe.directory='*' archive --format=zip -o "$dist/auroramon-source.zip" HEAD
 
           # the libraries it needs, and their licences
           ldd src/auroramon.exe | awk '$3 ~ /^\/ucrt64\// {print $3}' | sort -u > libs.txt

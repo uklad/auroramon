@@ -25,6 +25,7 @@
 
 
 #ifdef __WXMSW__
+#include <winsock2.h>   // wxWidgets includes this, and it must come before windows.h
 #include <windows.h>
 //#include <wx/msw/registry.h>
 #else
