@@ -6,6 +6,9 @@
 --log records each request as "time address opcode parameter".
 --clock-error starts the inverter's clock this many seconds from local time.
 --clock-drift makes the clock gain this many seconds per second.
+--fail-sets ignores this many requests to set the clock.  The program sends each
+set up to 3 times, so 3 of these make one failed set.
+--lose-set-replies makes this many requests to set the clock work, with no reply.
 Like a real inverter its clock knows nothing about daylight saving, so it will
 differ from local time by an hour after a change, until it's set.
 
@@ -115,6 +118,8 @@ def main():
     parser.add_argument("--log", help="file to record the requests")
     parser.add_argument("--clock-error", type=int, default=0, help="seconds between the inverter's clock and local time")
     parser.add_argument("--clock-drift", type=float, default=0, help="seconds gained by the clock per second")
+    parser.add_argument("--fail-sets", type=int, default=0, help="requests to set the clock to ignore")
+    parser.add_argument("--lose-set-replies", type=int, default=0, help="requests to set the clock which work, with no reply")
     args = parser.parse_args()
     global clock_error, clock_drift
     clock_error += args.clock_error
@@ -140,7 +145,14 @@ def main():
             if good_crc and request[0] in args.addr:
                 if log:
                     log.write(f"{time.time():.1f} {request[0]} {request[1]} {request[2]} {request[2:6].hex()}\n")
-                os.write(master, reply(request))
+                if request[1] == 71 and args.fail_sets > 0:
+                    args.fail_sets -= 1
+                    continue
+                response = reply(request)
+                if request[1] == 71 and args.lose_set_replies > 0:
+                    args.lose_set_replies -= 1
+                    continue
+                os.write(master, response)
             elif not good_crc:
                 buffer = b""   # lost framing, resynchronise on the next request
 
