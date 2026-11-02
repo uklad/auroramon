@@ -32,6 +32,9 @@ jobs:
       - name: Build the UTC offset test
         run: g++ -O1 -static -Isrc tests/gmt_offset_test.cpp -o gmt_offset_test.exe
 
+      - name: Build the HTTPS test
+        run: g++ -O1 tests/webrequest_test.cpp -o webrequest_test.exe $(wx-config-3.2 --cxxflags --libs base,net)
+
       - name: Make the package
         run: |
           name=auroramon-1.08-windows-x64-${GITHUB_SHA:0:7}
@@ -59,9 +62,32 @@ jobs:
               echo "$pkg" >> no-licence.txt
             fi
           done
+
+          # these packages don't include their licences, so get them from each project at this version
+          ver=$(pacman -Q mingw-w64-ucrt-x86_64-wxwidgets3.2-msw-libs | sed 's/.* //; s/-.*//')
+          mkdir -p "$dist/licenses/wxwidgets"
+          for f in licence preamble lgpl gpl; do
+            curl -fsSL -o "$dist/licenses/wxwidgets/$f.txt" "https://raw.githubusercontent.com/wxWidgets/wxWidgets/v$ver/docs/$f.txt"
+          done
+          ver=$(pacman -Q mingw-w64-ucrt-x86_64-libidn2 | sed 's/.* //; s/-.*//')
+          mkdir -p "$dist/licenses/libidn2"
+          for f in COPYING COPYING.LESSERv3 COPYINGv2; do
+            curl -fsSL -o "$dist/licenses/libidn2/$f" "https://gitlab.com/libidn/libidn2/-/raw/v$ver/$f"
+          done
           ls "$dist/licenses"
           echo "PACKAGE_NAME=$name" >> "$GITHUB_ENV"
           echo "PACKAGE_DIR=$dist" >> "$GITHUB_ENV"
+
+      - name: Make an HTTPS request with the packaged libraries
+        shell: pwsh
+        run: |
+          Copy-Item webrequest_test.exe $env:PACKAGE_DIR
+          $env:Path = "$env:SystemRoot\system32;$env:SystemRoot"
+          $exe = Join-Path $env:PACKAGE_DIR webrequest_test.exe
+          & $exe https://pvoutput.org/service/r2/getstatus.jsp
+          $code = $LASTEXITCODE
+          Remove-Item $exe
+          exit $code
 
       - name: Check UTC offsets against the Windows time zone data
         shell: pwsh

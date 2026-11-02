@@ -297,13 +297,13 @@ void SunInfo()
 
     sunr = (int)(sun.sunrise_time * 24*3600 + 0.5);
     suns = (int)(sun.sunset_time * 24*3600 + 0.5);
-    info = wxString::Format(_T("Sunrise\t\t%.2d:%.2d  at %3d degrees\nSunset\t\t%.2d:%.2d  at %3d degrees\n\n"
-                               "Solar Noon\t%.2d:%.2d  at %3d degrees\nMax Elevation\t%.2f degrees\n"),
+    info = wxString::Format(_T("Sunrise:  %.2d:%.2d  at %3d degrees\nSunset:  %.2d:%.2d  at %3d degrees\n\n"
+                               "Solar Noon:  %.2d:%.2d  at %3d degrees\nMax Elevation:  %.2f degrees\n"),
             sunr/3600, (sunr/60) % 60, (int)(sun.sunrise_azim + 0.5),
             suns/3600, (suns/60) % 60, (int)(sun.sunset_azim + 0.5),
             sun.noon_hrs, sun.noon_mins, (int)(sun.noon_azim + 0.5),
             sun.max_elev_day) +
-            _T("\nLongitude \t") + degrees_to_string(Longitude) + _T("\nLatitude    \t") + degrees_to_string(Latitude);
+            _T("\nLongitude:  ") + degrees_to_string(Longitude) + _T("\nLatitude:  ") + degrees_to_string(Latitude);
     wxMessageBox(info, _T("Sun  ") + graph_date, wxOK, mainframe);
 }
 
