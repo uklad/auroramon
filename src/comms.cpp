@@ -2015,7 +2015,7 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
         }
         else
         {
-            LogMessage(wxString::Format(_T("Inverter #%d: failed to set the clock after %d attempts, will try again within an hour"),
+            LogMessage(wxString::Format(_T("Inverter #%d: failed to set the clock after %d attempts, will try again in about an hour"),
                        inverter_address[command_inverter], CLOCK_SET_ATTEMPTS), 1);
             if(iv->auto_set_time > CLOCK_RETRY_WAIT)
                 iv->last_clock_check = time(NULL) - iv->auto_set_time + CLOCK_RETRY_WAIT;
