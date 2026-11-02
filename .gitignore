@@ -2,6 +2,7 @@
 src/*.o
 src/*.d
 src/auroramon
+src/auroramon.exe
 
 # Built programs and their bundled libraries
 linux_32bit/

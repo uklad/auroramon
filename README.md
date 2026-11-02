@@ -17,11 +17,21 @@ make
 
 To add a launcher and icon to your desktop's applications menu, run `icons/install-desktop.sh path/to/auroramon`. Add `--uninstall` instead of the path to remove them.
 
-The Windows code hasn't been built or tested since 1.07.
+## Building on Windows
+
+Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the run's Artifacts on the Actions page.
+
+To build it yourself, in the MSYS2 UCRT64 shell:
+
+```sh
+pacman -S make mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
+cd src
+make WX_CONFIG=wx-config-3.2
+```
 
 ## Testing without an inverter
 
-`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way, not with a real inverter.
+`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way on Linux, and not with a real inverter. On Windows the serial port hasn't been tested at all.
 
 ## More information
 

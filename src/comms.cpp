@@ -25,6 +25,7 @@
 
 
 #ifdef __WXMSW__
+#include <winsock2.h>   // wxWidgets includes this, and it must come before windows.h
 #include <windows.h>
 //#include <wx/msw/registry.h>
 #else
@@ -224,15 +225,20 @@ int SerialOpen()
 {//=============
     // Windows
 	int err =0;
-    char dev_name[256];
+    wxString dev_name = serial_port;
     DCB dcbSerialParams = {0};
     COMMTIMEOUTS timeouts = {0};
 
-    strncpy0(dev_name, serial_port.mb_str(wxConvLocal), sizeof(dev_name));
-    if(dev_name[0] == 0)
+    if(dev_name.IsEmpty())
         return(-1);   // no serial port set
 
-    fd_serial = CreateFile(dev_name, GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
+    // COM10 and above can only be opened with this prefix, and it works for the others too
+    if(dev_name.EndsWith(_T(":")))
+        dev_name.RemoveLast();
+    if(!dev_name.StartsWith(_T("\\\\")))
+        dev_name = _T("\\\\.\\") + dev_name;
+
+    fd_serial = CreateFileW(dev_name.wc_str(), GENERIC_READ | GENERIC_WRITE, 0, 0, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, 0);
 
     if(fd_serial == INVALID_HANDLE_VALUE)
     {
@@ -474,7 +480,7 @@ int ReadNextChar(char *out, int timeout)
 {//=====================================
 
 #ifdef __WXMSW__
-    unsigned long n_read;
+    unsigned long n_read = 0;
     if(!ReadFile(fd_serial, out, 1, &n_read, NULL))
     {
     }
