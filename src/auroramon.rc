@@ -1,0 +1,7 @@
+// Windows resources: the program's icon, and the manifest for current style controls and high DPI screens
+#define wxUSE_RC_MANIFEST 1
+#define wxUSE_DPI_AWARE_MANIFEST 2
+
+aaaa ICON "../icons/auroramon.ico"
+
+#include "wx/msw/wx.rc"

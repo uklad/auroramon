@@ -4,6 +4,9 @@
 SRCS= auroramonApp.cpp auroramonMain.cpp chart.cpp dialog.cpp graphdialog.cpp statuspanel.cpp dates.cpp sun.cpp comms.cpp alarms.cpp pvoutput.cpp
 
 OBJS=$(patsubst %.cpp,%.o,$(SRCS))
+ifeq ($(OS),Windows_NT)
+OBJS += auroramon_rc.o
+endif
 DEPS=$(patsubst %.cpp,%.d,$(SRCS))
 
 WX_CONFIG ?= wx-config
@@ -16,6 +19,9 @@ all: auroramon
 %.o: %.cpp
 	$(CXX) $(ALL_CXXFLAGS) -c $< -o $@
 
+auroramon_rc.o: auroramon.rc ../icons/auroramon.ico
+	`$(WX_CONFIG) --rescomp` -I. $< -o $@
+
 auroramon: $(OBJS)
 	$(CXX) $(LDFLAGS) -o $@ $(OBJS) `$(WX_CONFIG) --libs`
 
@@ -23,7 +29,7 @@ clean:
 	rm -f *.o *.d *~
 
 distclean: clean
-	rm -f auroramon
+	rm -f auroramon auroramon.exe
 
 .PHONY: all clean distclean
 

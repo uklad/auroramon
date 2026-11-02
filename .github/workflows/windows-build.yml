@@ -1,0 +1,114 @@
+name: Windows build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            git
+            make
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
+
+      - name: Build
+        run: |
+          cd src
+          make -j4 WX_CONFIG=wx-config-3.2 CXXFLAGS="-O2 -Wall"
+
+      - name: Build the UTC offset test
+        run: g++ -O1 -static -Isrc tests/gmt_offset_test.cpp -o gmt_offset_test.exe
+
+      - name: Build the HTTPS test
+        run: g++ -O1 tests/webrequest_test.cpp -o webrequest_test.exe $(wx-config-3.2 --cxxflags --libs base,net)
+
+      - name: Make the package
+        run: |
+          name=auroramon-1.08-windows-x64-${GITHUB_SHA:0:7}
+          dist=dist/$name
+          mkdir -p "$dist/licenses"
+          cp src/auroramon.exe help.html License.txt README.txt "$dist/"
+          git -c safe.directory='*' archive --format=zip -o "$dist/auroramon-source.zip" HEAD
+
+          # the libraries it needs, and their licences
+          ldd src/auroramon.exe | awk '$3 ~ /^\/ucrt64\// {print $3}' | sort -u > libs.txt
+          cat libs.txt
+          for lib in $(cat libs.txt); do
+            cp "$lib" "$dist/"
+            pkg=$(pacman -Qoq "$lib")
+            short=${pkg#mingw-w64-ucrt-x86_64-}
+            short=${short%-libs}
+            short=${short%-common}
+            short=${short%-msw}
+            found=no
+            for dir in /ucrt64/share/licenses/"$short"*; do
+              if [ -d "$dir" ]; then cp -r "$dir" "$dist/licenses/"; found=yes; fi
+            done
+            if [ $found = no ]; then
+              echo "No licence directory for $pkg"
+              echo "$pkg" >> no-licence.txt
+            fi
+          done
+
+          # these packages don't include their licences, so get them from each project at this version
+          ver=$(pacman -Q mingw-w64-ucrt-x86_64-wxwidgets3.2-msw-libs | sed 's/.* //; s/-.*//')
+          mkdir -p "$dist/licenses/wxwidgets"
+          for f in licence preamble lgpl gpl; do
+            curl -fsSL -o "$dist/licenses/wxwidgets/$f.txt" "https://raw.githubusercontent.com/wxWidgets/wxWidgets/v$ver/docs/$f.txt"
+          done
+          ver=$(pacman -Q mingw-w64-ucrt-x86_64-libidn2 | sed 's/.* //; s/-.*//')
+          mkdir -p "$dist/licenses/libidn2"
+          for f in COPYING COPYING.LESSERv3 COPYINGv2; do
+            curl -fsSL -o "$dist/licenses/libidn2/$f" "https://gitlab.com/libidn/libidn2/-/raw/v$ver/$f"
+          done
+          ls "$dist/licenses"
+          echo "PACKAGE_NAME=$name" >> "$GITHUB_ENV"
+          echo "PACKAGE_DIR=$dist" >> "$GITHUB_ENV"
+
+      - name: Make an HTTPS request with the packaged libraries
+        shell: pwsh
+        run: |
+          Copy-Item webrequest_test.exe $env:PACKAGE_DIR
+          $env:Path = "$env:SystemRoot\system32;$env:SystemRoot"
+          $exe = Join-Path $env:PACKAGE_DIR webrequest_test.exe
+          & $exe https://pvoutput.org/
+          $code = $LASTEXITCODE
+          Write-Host '--- how a refused request looks, as with a wrong API key'
+          & $exe https://pvoutput.org/service/r2/getstatus.jsp
+          Remove-Item $exe
+          exit $code
+
+      - name: Check UTC offsets against the Windows time zone data
+        shell: pwsh
+        run: tests/windows_gmt_offset.ps1 -Test .\gmt_offset_test.exe
+
+      - name: Run it, and open every dialog
+        shell: pwsh
+        run: tests/windows_smoke.ps1 -Exe "$env:PACKAGE_DIR\auroramon.exe" -Header src\auroramon.h -Out screenshots
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: warn
+
+      - name: Upload the program
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: ${{ env.PACKAGE_DIR }}

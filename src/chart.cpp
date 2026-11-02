@@ -2072,6 +2072,9 @@ int SavePvoutput(int inv)
     FILE *f;
     wxString fname;
 
+    if(graph_data[inv] == NULL)
+        return(-1);   // this inverter has no data
+
     fname = data_year_dir2 + _T("/pvoutput_") + graph_date_ymd;
     f = fopen(fname.mb_str(wxConvLocal), "w");
     if(f == NULL)
