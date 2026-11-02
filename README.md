@@ -8,12 +8,9 @@ This is a continuation of [Aurora Monitor](https://sourceforge.net/projects/auro
 
 Version 1.08 needs wxWidgets 3.1.5 or later. Run `wx-config --version` to check what you have. The package below is for Debian and Ubuntu. It may have a different name on other distributions, and Ubuntu 22.04's default wxWidgets is too old.
 
-This repository is private, so install the [GitHub CLI](https://cli.github.com/) and log in with an account that can read it:
-
 ```sh
-sudo apt install build-essential libwxgtk3.2-dev
-gh auth login
-gh repo clone uklad/auroramon
+sudo apt install build-essential git libwxgtk3.2-dev
+git clone https://github.com/uklad/auroramon.git
 cd auroramon/src
 make -j"$(nproc)"
 ./auroramon
@@ -54,7 +51,7 @@ Run `git pull` in the repository, then `make` again in `src`. If `help.html` has
 
 ## Building on Windows
 
-You don't need to build it yourself. Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the latest run's Artifacts on the [Actions page](https://github.com/uklad/auroramon/actions), unzip it and run `auroramon.exe`.
+You don't need to build it yourself. Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the latest run's Artifacts on the [Actions page](https://github.com/uklad/auroramon/actions), unzip it and run `auroramon.exe`. GitHub asks you to log in to download Artifacts, and it deletes them after 90 days unless the repository is set to keep them for less.
 
 To build it yourself, in the MSYS2 UCRT64 shell:
 
