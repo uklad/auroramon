@@ -84,8 +84,10 @@ jobs:
           Copy-Item webrequest_test.exe $env:PACKAGE_DIR
           $env:Path = "$env:SystemRoot\system32;$env:SystemRoot"
           $exe = Join-Path $env:PACKAGE_DIR webrequest_test.exe
-          & $exe https://pvoutput.org/service/r2/getstatus.jsp
+          & $exe https://pvoutput.org/
           $code = $LASTEXITCODE
+          Write-Host '--- how a refused request looks, as with a wrong API key'
+          & $exe https://pvoutput.org/service/r2/getstatus.jsp
           Remove-Item $exe
           exit $code
 

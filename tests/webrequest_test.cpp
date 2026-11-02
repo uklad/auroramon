@@ -39,6 +39,8 @@ public:
             case wxWebRequest::State_Unauthorized:
             case wxWebRequest::State_Cancelled:
                 printf("Failed: %s\n", (const char *)event.GetErrorDescription().utf8_str());
+                if(event.GetResponse().IsOk())
+                    printf("HTTP status %d\n", event.GetResponse().GetStatus());
                 loop.Exit();
                 break;
             default:
