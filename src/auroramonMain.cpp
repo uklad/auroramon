@@ -26,9 +26,12 @@
 #include <wx/datetime.h>
 #include <wx/iconbndl.h>
 #include <wx/mstream.h>
+#include <wx/stdpaths.h>
+#include <wx/filesys.h>
 
 #include "auroramon.h"
 #include "auroramon_icon.h"
+#include "gmt_offset.h"
 
 
 
@@ -106,32 +109,9 @@ int option_date_format;
 
 int GetGmtOffset(time_t timeval)
 {//=============================
-#ifdef __WXMSW__
-    wxDateTime datetime;
-    wxDateTime gmt;
-    wxTimeSpan timespan;
-#endif
-
-#ifndef __WXMSW__
     // Ask the C library directly.  Converting the UTC time back as if it was a local time
     // gives the wrong offset for some hours around a change of daylight saving.
-    {
-        struct tm local;
-        time_t t = (timeval == 0) ? time(NULL) : timeval;
-        localtime_r(&t, &local);
-        return((int)local.tm_gmtoff);
-    }
-#else
-    if(timeval == 0)
-        datetime = wxDateTime::Now();
-    else
-        datetime.Set(timeval);
-
-    gmt = datetime.ToTimezone(wxDateTime::UTC);
-
-    timespan = datetime.Subtract(gmt);
-    return(timespan.GetSeconds().ToLong());
-#endif
+    return(GmtOffsetOfTime((timeval == 0) ? time(NULL) : timeval));
 }
 
 
@@ -1233,14 +1213,18 @@ void Mainframe::ShowHelp()
     wxString fname;
 
 #ifdef __WXMSW__
-    fname = _T("help.html");
+    // next to the program, the current directory depends on how it was started
+    fname = wxFileName(wxStandardPaths::Get().GetExecutablePath()).GetPathWithSep() + _T("help.html");
 #else
     fname = data_system_dir + _T("/help.html");
+#endif
     if(wxFileExists(fname) == false)
     {
         wxMessageBox(key_info, _T("Key commands"), wxOK, this);
         return;
     }
+#ifdef __WXMSW__
+    fname = wxFileSystem::FileNameToURL(wxFileName(fname));
 #endif
 
     mainframe->GetClientSize(&width, &height);

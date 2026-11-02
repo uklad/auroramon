@@ -1,0 +1,82 @@
+name: Windows build
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: false
+          install: >-
+            make
+            zip
+            mingw-w64-ucrt-x86_64-gcc
+            mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
+
+      - name: Build
+        run: |
+          cd src
+          make -j4 WX_CONFIG=wx-config-3.2 CXXFLAGS="-O2 -Wall"
+
+      - name: Build the UTC offset test
+        run: g++ -O1 -static -Isrc tests/gmt_offset_test.cpp -o gmt_offset_test.exe
+
+      - name: Make the package
+        run: |
+          short=$(git rev-parse --short HEAD)
+          name=auroramon-1.08-windows-x64-$short
+          dist=dist/$name
+          mkdir -p "$dist/licenses"
+          cp src/auroramon.exe help.html License.txt README.txt "$dist/"
+          git archive --format=zip -o "$dist/auroramon-source.zip" HEAD
+
+          # the libraries it needs, and their licences
+          ldd src/auroramon.exe | awk '$3 ~ /^\/ucrt64\// {print $3}' | sort -u > libs.txt
+          cat libs.txt
+          for lib in $(cat libs.txt); do
+            cp "$lib" "$dist/"
+            pkg=$(pacman -Qoq "$lib")
+            if [ -d "/ucrt64/share/licenses/${pkg#mingw-w64-ucrt-x86_64-}" ]; then
+              cp -r "/ucrt64/share/licenses/${pkg#mingw-w64-ucrt-x86_64-}" "$dist/licenses/"
+            else
+              echo "No licence directory for $pkg"
+              echo "$pkg" >> "$dist/licenses/see-msys2-packages.txt"
+            fi
+          done
+
+          (cd dist && zip -qr "$name.zip" "$name")
+          echo "PACKAGE_NAME=$name" >> "$GITHUB_ENV"
+          echo "PACKAGE_DIR=$dist" >> "$GITHUB_ENV"
+
+      - name: Check UTC offsets against the Windows time zone data
+        shell: pwsh
+        run: tests/windows_gmt_offset.ps1 -Test .\gmt_offset_test.exe
+
+      - name: Run it, and open every dialog
+        shell: pwsh
+        run: tests/windows_smoke.ps1 -Exe "$env:PACKAGE_DIR\auroramon.exe" -Header src\auroramon.h -Out screenshots
+
+      - name: Upload the screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screenshots
+          path: screenshots
+          if-no-files-found: warn
+
+      - name: Upload the program
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: ${{ env.PACKAGE_DIR }}
