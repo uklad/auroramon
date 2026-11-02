@@ -12,7 +12,8 @@ Is the installer for the Windows version.
 Version 1.08   02.11.2026  (modified from 1.07, not by the original author)
 
 Building now requires wxWidgets 3.1.5 or later (eg. libwxgtk3.2-dev).
-The Windows code wasn't built or tested for this version.
+The Windows version is built by GitHub Actions.  It has been run on Windows,
+but its serial port code hasn't been tested with an inverter.
 
 Crashes and memory errors:
 1. Crash when inverter B has data but inverter A has none.

@@ -31,7 +31,7 @@ make WX_CONFIG=wx-config-3.2
 
 ## Testing without an inverter
 
-`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way, not with a real inverter.
+`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way on Linux, and not with a real inverter. On Windows the serial port hasn't been tested at all.
 
 ## More information
 
