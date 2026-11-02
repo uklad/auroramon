@@ -4,6 +4,10 @@ A wxWidgets program which monitors Aurora solar power inverters through a serial
 
 This is a continuation of [Aurora Monitor](https://sourceforge.net/projects/auroramonitor/) by Jonathan Duddington, which is no longer being developed. Version 1.07 is the first commit here, so `git diff` against it shows every later change.
 
+It's intended for domestic installations rather than commercial ones, so it only supports up to 2 inverters.
+
+Version 1.08 has been updated to support current wxWidgets (3.1.5 or later), as wxWidgets 2.8, which earlier versions used, is no longer available on newer Linux distributions.
+
 ## Building on Linux
 
 Version 1.08 needs wxWidgets 3.1.5 or later. Run `wx-config --version` to check what you have. The package below is for Debian and Ubuntu. It may have a different name on other distributions, and Ubuntu 22.04's default wxWidgets is too old.
