@@ -69,6 +69,7 @@ Inverter clock and daylight saving:
     to computer time every hour, 6 hours, day or week.  It also syncs at program
     start and when daylight saving starts or ends.  A difference of 5 seconds or
     less is left alone, and more than 26 hours is only reported in the message log.
+    A failed set is tried again at the next poll, 3 times, then in about an hour.
 30. The offset from UTC was wrong for some hours around a daylight saving change.
 31. "Set inverter time" was an hour out for a specified time during daylight
     saving, or on a date with different daylight saving from now.

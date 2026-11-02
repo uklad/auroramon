@@ -1998,10 +1998,28 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
     if(command_type == cmdAutoSetInvTime)
     {
         // no message box, this can run unattended
+        INVERTER *iv = &inverters[command_inverter];
+
         if(data_ok == 1)
+        {
             LogMessage(wxString::Format(_T("Inverter #%d: clock set to computer time"), inverter_address[command_inverter]), 1);
+        }
         else
-            LogMessage(wxString::Format(_T("Inverter #%d: failed to set the clock"), inverter_address[command_inverter]), 1);
+        if(++iv->clock_set_failures < CLOCK_SET_ATTEMPTS)
+        {
+            // Read the clock again at the next poll, and decide again from that.
+            // The inverter may have taken the new time and only its reply was lost.
+            LogMessage(wxString::Format(_T("Inverter #%d: failed to set the clock, trying again"), inverter_address[command_inverter]), 1);
+            iv->clock_check_done = 0;
+            iv->need_time_offset = 1;
+        }
+        else
+        {
+            LogMessage(wxString::Format(_T("Inverter #%d: failed to set the clock after %d attempts, will try again in about an hour"),
+                       inverter_address[command_inverter], CLOCK_SET_ATTEMPTS), 1);
+            if(iv->auto_set_time > CLOCK_RETRY_WAIT)
+                iv->last_clock_check = time(NULL) - iv->auto_set_time + CLOCK_RETRY_WAIT;
+        }
     }
 
     if(command_type == cmdInverterInfo)

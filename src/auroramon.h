@@ -209,6 +209,7 @@ typedef struct {
     int auto_set_time;           // option: seconds between syncs of the inverter's clock, 0=never
     time_t last_clock_check;
     int clock_check_done;        // the result of this check has been dealt with
+    int clock_set_failures;      // failed attempts to set the clock, during this check
     int previous_minute;
     int period_in_minute;
     unsigned int counters[4];
@@ -773,6 +774,10 @@ class DlgCoords: public wxDialog
 // Automatic setting of the inverter's clock
 #define CLOCK_TOLERANCE   5           // seconds, leave the clock alone if it's this close
 #define CLOCK_MAX_CHANGE  (26*3600)   // seconds, a larger difference needs a person to look at it
+#define CLOCK_SET_ATTEMPTS 3          // attempts to set the clock, before waiting
+#ifndef CLOCK_RETRY_WAIT
+#define CLOCK_RETRY_WAIT  3600        // seconds, the longest wait for another check after those attempts failed
+#endif
 
 extern wxString cmdoutput;
 extern int command_inverter;
