@@ -8,6 +8,11 @@
 class TestApp : public wxAppConsole
 {
 public:
+    bool OnInit() override
+    {
+        return true;   // the URL isn't one of wxWidgets' own command line options
+    }
+
     int OnRun() override
     {
         wxWebSession &session = wxWebSession::GetDefault();
