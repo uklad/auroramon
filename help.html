@@ -255,16 +255,22 @@ This displays:
 <A NAME="toc12"></A>
 <H3>Set inverter time</H3>
 <P>
-The inverter's clock shows local time, and it doesn't change for daylight saving by itself.
-<B>Settings-&gt;Inverter</B> has an option to sync it to computer time every hour, 6 hours, day or week
-(the default is Never).  When this is on, it also syncs at program start and when daylight saving starts or ends.
-A difference of 5 seconds or less is left alone. A difference of more than 26 hours is not changed, it may mean that
-the computer's clock is wrong, and is reported in the <B>Message log</B>.
+This displays the current computer time and inverter time.  It allows the inverter time to be set to either
+a specified time, or to match the computer time.
 </P>
 
 <P>
-This displays the current computer time and inverter time.  It allows the inverter time to be set to either
-a specified time, or to match the computer time.
+The inverter's clock shows local time, and it doesn't change for daylight saving by itself.
+To keep it correct automatically, use the option in <B>Settings-&gt;Inverter</B> to sync it to computer time
+every hour, 6 hours, day or week (the default is Never).  When this is on, it also syncs at program start and
+when daylight saving starts or ends.  A check that falls due while the inverter is asleep waits until it wakes.
+</P>
+
+<P>
+A difference of 5 seconds or less is left alone.  A difference of more than 26 hours is not changed, because it may
+mean that the computer's clock is wrong.  It's reported in the <B>Message log</B>, and you can set the time here instead.
+Each sync is also recorded in the <B>Message log</B>.  If a sync fails, it's tried again after about 15 seconds, up to 3 attempts,
+and then in about an hour.
 </P>
 
 <A NAME="toc13"></A>

@@ -156,6 +156,7 @@ static void ScheduleClockCheck(INVERTER *iv, time_t now)
     {
         iv->last_clock_check = now;
         iv->clock_check_done = 0;
+        iv->clock_set_failures = 0;
         iv->need_time_offset = 1;   // read the inverter's clock
     }
     offset_changed[inv] = false;
@@ -181,6 +182,12 @@ static void CheckInverterClock(int inv)
     if(diff <= CLOCK_TOLERANCE)
     {
         iv->clock_check_done = 1;
+        if(iv->clock_set_failures > 0)
+        {
+            // the inverter took the new time, but its reply was lost
+            iv->clock_set_failures = 0;
+            LogMessage(wxString::Format(_T("Inverter #%d: clock is now correct"), inverter_address[inv]), 1);
+        }
         return;
     }
 

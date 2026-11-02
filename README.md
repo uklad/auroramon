@@ -37,6 +37,7 @@ make WX_CONFIG=wx-config-3.2
 
 - [README.txt](README.txt): changes in each version
 - [help.html](help.html): how to use the program
+- [docs/inverter-clock.md](docs/inverter-clock.md): how the inverter's clock is updated, including daylight saving
 
 ## Licence
 
