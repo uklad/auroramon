@@ -21,7 +21,6 @@ jobs:
           install: >-
             git
             make
-            zip
             mingw-w64-ucrt-x86_64-gcc
             mingw-w64-ucrt-x86_64-wxwidgets3.2-msw
 
@@ -35,8 +34,7 @@ jobs:
 
       - name: Make the package
         run: |
-          short=${GITHUB_SHA:0:7}
-          name=auroramon-1.08-windows-x64-$short
+          name=auroramon-1.08-windows-x64-${GITHUB_SHA:0:7}
           dist=dist/$name
           mkdir -p "$dist/licenses"
           cp src/auroramon.exe help.html License.txt README.txt "$dist/"
@@ -48,15 +46,20 @@ jobs:
           for lib in $(cat libs.txt); do
             cp "$lib" "$dist/"
             pkg=$(pacman -Qoq "$lib")
-            if [ -d "/ucrt64/share/licenses/${pkg#mingw-w64-ucrt-x86_64-}" ]; then
-              cp -r "/ucrt64/share/licenses/${pkg#mingw-w64-ucrt-x86_64-}" "$dist/licenses/"
-            else
+            short=${pkg#mingw-w64-ucrt-x86_64-}
+            short=${short%-libs}
+            short=${short%-common}
+            short=${short%-msw}
+            found=no
+            for dir in /ucrt64/share/licenses/"$short"*; do
+              if [ -d "$dir" ]; then cp -r "$dir" "$dist/licenses/"; found=yes; fi
+            done
+            if [ $found = no ]; then
               echo "No licence directory for $pkg"
-              echo "$pkg" >> "$dist/licenses/see-msys2-packages.txt"
+              echo "$pkg" >> no-licence.txt
             fi
           done
-
-          (cd dist && zip -qr "$name.zip" "$name")
+          ls "$dist/licenses"
           echo "PACKAGE_NAME=$name" >> "$GITHUB_ENV"
           echo "PACKAGE_DIR=$dist" >> "$GITHUB_ENV"
 
