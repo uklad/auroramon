@@ -107,6 +107,7 @@ enum
     dlgDelete,
     dlgInsert,
     dlgDefault,
+    dlgTest,
     dlgSerialPort,
     dlgInverter1,
     dlgInverter2,
@@ -673,6 +674,8 @@ class DlgPvoutput: public wxDialog
         wxCheckBox *t_instantaneous;
         wxCheckBox *t_grid_voltage;
         wxCheckBox *t_temperature;
+        wxButton *button_test;
+        wxStaticText *t_test_result;
 
         wxButton *button_OK;
         wxButton *button_Cancel;
@@ -821,6 +824,10 @@ extern wxMutex comms_mutex;
 void PvoSendLive(const wxString &query, const wxString &fail_line);
 void ResendPvoutput(int timeval);
 void PvoShutdown();
+void PvoTestStart(const wxString &url, const wxString &sid, const wxString &key, wxStaticText *result, wxButton *button);
+void PvoTestCancel();
+void PvoUpdateStatus();
+void PvoResetStatus();
 void InvalidateDates();
 void CommsShutdown();
 

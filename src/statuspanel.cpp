@@ -205,8 +205,6 @@ void Mainframe::SetupStatusPanel(int control)
 
     style = chart_pages[graph_panel->page].status_type;
 
-    status_panel->Freeze();
-
     // take out all the groups (Detach doesn't delete them), and then place the ones for this style
     for(ix=0; ix<N_INV; ix++)
     {
@@ -278,7 +276,6 @@ void Mainframe::SetupStatusPanel(int control)
 
     status_panel->Layout();
     Layout();
-    status_panel->Thaw();
     pulse_panel->Refresh();
 }
 

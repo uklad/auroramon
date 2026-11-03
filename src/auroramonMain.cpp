@@ -1550,7 +1550,12 @@ Mainframe::Mainframe(wxFrame *frame, const wxString& title)
     int inv;
 
     mainframe = this;
-    CreateStatusBar(1);
+    CreateStatusBar(2);
+    {
+        // the second field shows the state of the PVOutput updates
+        int widths[2] = {-1, GetStatusBar()->GetTextExtent(_T("PVOutput: failed at 00:00, 9999 waiting")).x + 24};
+        SetStatusWidths(2, widths);
+    }
     MakeMenus();
 
 	startuptimer.SetOwner(this->GetEventHandler(), idStartupTimer);
@@ -1615,6 +1620,7 @@ void Mainframe::OnStartupTimer(wxTimerEvent& WXUNUSED(event))
 {//===========================================================
 	graph_panel->enable_draw = 1;
 	graph_panel->Refresh();
+	PvoUpdateStatus();
 //	my_event.SetId(idRefreshGraph);
 //  wxPostEvent(graph_panel->GetEventHandler(), my_event);
 }

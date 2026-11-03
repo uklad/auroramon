@@ -65,9 +65,19 @@ cd src
 make WX_CONFIG=wx-config-3.2
 ```
 
+## PVOutput
+
+To upload to [PVOutput](https://pvoutput.org), enter your System Id and API Key in Settings → PVOutput.org, and choose how often to send updates.
+
+- **Test connection** checks the settings in the dialog with PVOutput's read-only Get System service, because PVOutput has no test mode. It sends no readings, but it counts towards PVOutput's hourly request limit. A read-only API key passes this test and then fails when uploading.
+- **The line at the bottom of the window** shows the most recent result and how many readings are waiting, such as `PVOutput: failed at 08:25, 1 waiting`.
+- **If an upload fails,** the reading is saved in `system/pvoutput_fail.txt` in the data directory. The program tries to send saved readings about every 2 minutes, up to 30 at a time, and discards any more than 13 days old.
+
+These have been tested against a local server, not PVOutput itself.
+
 ## Testing without an inverter
 
-`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way on Linux, and not with a real inverter. On Windows the serial port hasn't been tested at all.
+`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way on Linux, on X11 and KDE Wayland, and not with a real inverter. On Windows the serial port hasn't been tested at all.
 
 ## More information
 
