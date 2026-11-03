@@ -16,7 +16,7 @@ if [ "$1" = "--uninstall" ]; then
     exit 0
 fi
 
-program=${1:-$here/../linux_64bit_1.08/auroramon}
+program=${1:-$here/../src/auroramon}
 if [ ! -x "$program" ]; then
     echo "Can't find the program: $program" >&2
     exit 1

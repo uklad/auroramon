@@ -37,7 +37,7 @@ jobs:
 
       - name: Make the package
         run: |
-          name=auroramon-1.08-windows-x64-${GITHUB_SHA:0:7}
+          name=auroramon-windows-x64-${GITHUB_SHA:0:7}
           dist=dist/$name
           mkdir -p "$dist/licenses"
           cp src/auroramon.exe help.html License.txt README.txt "$dist/"
