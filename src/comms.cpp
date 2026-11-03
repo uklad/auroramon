@@ -1968,6 +1968,10 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
         }
     }
 
+    // The inverter may have been removed in Setup while this poll was in progress.
+    // Discard the result, because nothing would clear its power from the total later.
+    bool removed = (inverter_address[command_inverter] == 0);
+
     data_ok = 0;
     switch(event.GetId())
     {
@@ -1995,7 +1999,13 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
         break;
     }
 
-    if(command_type == cmdAutoSetInvTime)
+    if(removed)
+    {
+        inverters[command_inverter].alive = 0;
+        power_total[command_inverter] = 0;
+    }
+
+    if((command_type == cmdAutoSetInvTime) && !removed)
     {
         // no message box, this can run unattended
         INVERTER *iv = &inverters[command_inverter];
@@ -2027,6 +2037,7 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
         inv_info = command_inverter;
     }
     else
+    if(!removed)
     {
         period_type = DataResponse(data_ok, &inverter_response[command_inverter]);
         if(period_type > 0)

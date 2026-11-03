@@ -37,6 +37,69 @@ static wxString FailFileName()
 }
 
 
+// The outcome of the most recent upload, for the status bar
+enum {PVO_NOT_SENT, PVO_SENT_OK, PVO_SEND_FAILED};
+static int status_outcome = PVO_NOT_SENT;
+static wxString status_time;
+
+
+static int CountWaiting()
+{//======================
+    FILE *f;
+    int count = 0;
+    char buf[256];
+
+    if((f = fopen(FailFileName().mb_str(wxConvLocal), "r")) == NULL)
+        return(0);
+
+    while(fgets(buf, sizeof(buf), f) != NULL)
+    {
+        if(buf[0] == '2')
+            count++;
+    }
+    fclose(f);
+    return(count);
+}
+
+
+static void SetOutcome(int outcome)
+{//================================
+    status_outcome = outcome;
+    status_time = wxDateTime::Now().Format(_T("%H:%M"));
+}
+
+
+void PvoUpdateStatus()
+{//===================
+    wxString text;
+    int waiting = CountWaiting();
+
+    if(status_outcome == PVO_SENT_OK)
+        text = _T("PVOutput: OK at ") + status_time;
+    else
+    if(status_outcome == PVO_SEND_FAILED)
+        text = _T("PVOutput: failed at ") + status_time;
+    else
+    if((pvoutput.live_updates & PVO_PERIOD) == 0)
+        text = _T("PVOutput: off");
+    else
+        text = _T("PVOutput: no update yet");
+
+    if(waiting > 0)
+        text += wxString::Format(_T(", %d waiting"), waiting);
+
+    mainframe->SetStatusText(text, 1);
+}
+
+
+void PvoResetStatus()
+{//==================
+    // the settings have changed, so the last outcome no longer applies
+    status_outcome = PVO_NOT_SENT;
+    PvoUpdateStatus();
+}
+
+
 class PvoUploader : public wxEvtHandler
 {//====================================
     public:
@@ -179,6 +242,8 @@ void PvoUploader::Finish(bool ok, const wxString &error)
             LogMessage(_T("PVOutput.org bulk update OK"), 1);
         }
         pvoutput.failed = 0;
+        SetOutcome(PVO_SENT_OK);
+        PvoUpdateStatus();
         return;
     }
 
@@ -188,6 +253,9 @@ void PvoUploader::Finish(bool ok, const wxString &error)
 
     if(!fail_line.empty())
         SaveForRetry(fail_line);
+
+    SetOutcome(PVO_SEND_FAILED);
+    PvoUpdateStatus();
 }
 
 
@@ -241,6 +309,7 @@ void PvoUploader::SendLive(const wxString &query, const wxString &fail_line)
     {
         // the previous request hasn't finished, send this one with the next batch
         SaveForRetry(fail_line);
+        PvoUpdateStatus();
         return;
     }
     live_fail_line = fail_line;
@@ -297,12 +366,235 @@ void PvoUploader::SendPending()
     {
         // nothing is worth sending, only obsolete lines
         RemoveSentLines(lines_read);
+        PvoUpdateStatus();
         return;
     }
 
     live_fail_line.clear();
     batch_lines = lines_read;
     Start(pvoutput.url + _T("addbatchstatus.jsp?data=") + data);
+}
+
+
+// Tests the settings in the PVOutput dialog.  The specification has no test mode,
+// so this uses Get System, which needs a valid System Id and API Key and changes nothing.
+class PvoTester : public wxEvtHandler
+{//==================================
+    public:
+        PvoTester();
+        ~PvoTester();
+        void Start(const wxString &url, const wxString &sid, const wxString &key, wxStaticText *result_text, wxButton *test_button);
+        void Cancel();
+
+    private:
+        void Done(const wxString &text);
+        void OnRequestState(wxWebRequestEvent &event);
+        void OnTimeout(wxTimerEvent &event);
+
+        wxWebRequest request;
+        wxTimer timer;
+        wxStaticText *result;
+        wxButton *button;
+        bool active;
+        wxString pending_error;
+};
+
+
+#define PVO_TEST_NOT_AUTHORIZED  _T("Not authorized.  Check the System Id and API Key, and that API access is enabled in your pvoutput.org settings.")
+
+
+static wxString DescribeSystem(wxWebResponse &response)
+{//====================================================
+    // The fields before the first ';' are the system's details, and the last 15 of those
+    // follow the name, which could itself contain a comma.
+    wxString line = response.AsString().BeforeFirst('\n').BeforeFirst(';');
+    wxArrayString fields = wxSplit(line.Trim(), ',', '\0');
+    wxString name;
+    wxString text;
+    int n_name = (int)fields.GetCount() - 15;
+    int ix;
+
+    if((n_name < 1) || line.Contains(_T("<")))
+        return(_T("The server answered, but not as PVOutput would.  Check the URL."));
+
+    for(ix = 0; ix < n_name; ix++)
+    {
+        if(ix > 0)
+            name += _T(",");
+        name += fields[ix];
+    }
+
+    text = _T("Connected to \"") + name + _T("\".");
+
+    wxString remaining = response.GetHeader(_T("X-Rate-Limit-Remaining"));
+    wxString limit = response.GetHeader(_T("X-Rate-Limit-Limit"));
+    if(!remaining.empty() && !limit.empty())
+        text += _T("  ") + remaining + _T(" of ") + limit + _T(" requests left this hour.");
+    return(text);
+}
+
+
+static wxString DescribeRefusal(wxWebResponse &response)
+{//=====================================================
+    wxString text;
+    wxString body;
+
+    if(response.GetStatus() == 401)
+        return(PVO_TEST_NOT_AUTHORIZED);
+
+    text = wxString::Format(_T("Refused, HTTP status %d"), response.GetStatus());
+
+    // PVOutput gives the reason as a line of text, such as having reached the hourly limit
+    body = response.AsString().BeforeFirst('\n').Trim().Left(150);
+    if(!body.empty() && !body.Contains(_T("<")))
+        text += _T(": ") + body;
+    return(text);
+}
+
+
+PvoTester::PvoTester()
+{//===================
+    result = NULL;
+    button = NULL;
+    active = false;
+    timer.SetOwner(this);
+    Bind(wxEVT_WEBREQUEST_STATE, &PvoTester::OnRequestState, this);
+    Bind(wxEVT_TIMER, &PvoTester::OnTimeout, this);
+}
+
+
+PvoTester::~PvoTester()
+{//====================
+    Unbind(wxEVT_WEBREQUEST_STATE, &PvoTester::OnRequestState, this);
+    Cancel();
+}
+
+
+void PvoTester::Start(const wxString &url, const wxString &sid, const wxString &key, wxStaticText *result_text, wxButton *test_button)
+{//=================================================================================================================================
+    wxString base = url;
+
+    if(active)
+        return;
+
+    result = result_text;
+    button = test_button;
+
+    if(url.empty() || sid.empty() || key.empty())
+    {
+        Done(_T("Enter the URL, System Id and API Key first."));
+        return;
+    }
+
+    if(base.Right(1) != _T("/"))
+        base += _T("/");
+
+    request = wxWebSession::GetDefault().CreateRequest(this, base + _T("getsystem.jsp"));
+    if(!request.IsOk())
+    {
+        Done(_T("Can't create a request for this URL."));
+        return;
+    }
+
+    request.SetHeader(_T("X-Pvoutput-Apikey"), key);
+    request.SetHeader(_T("X-Pvoutput-SystemId"), sid);
+    request.SetHeader(_T("X-Rate-Limit"), _T("1"));
+
+    active = true;
+    pending_error.clear();
+    button->Disable();
+    result->SetLabelText(_T("Testing..."));
+    timer.StartOnce(PVO_TIMEOUT_MS);
+    request.Start();
+}
+
+
+void PvoTester::Cancel()
+{//=====================
+    if(active)
+    {
+        active = false;
+        timer.Stop();
+        request.Cancel();
+    }
+}
+
+
+void PvoTester::Done(const wxString &text)
+{//=======================================
+    active = false;
+    timer.Stop();
+    result->SetLabelText(text);
+    result->Wrap(result->GetSize().x);
+    button->Enable();
+}
+
+
+void PvoTester::OnRequestState(wxWebRequestEvent &event)
+{//=====================================================
+    // ignore a request which was cancelled when the dialog closed
+    if(!active || (event.GetRequest().GetId() != request.GetId()))
+        return;
+
+    switch(event.GetState())
+    {
+    case wxWebRequest::State_Completed:
+    {
+        wxWebResponse response = event.GetResponse();
+        Done(DescribeSystem(response));
+        break;
+    }
+
+    case wxWebRequest::State_Failed:
+    {
+        wxWebResponse response = event.GetResponse();
+        if(response.IsOk() && (response.GetStatus() >= 400))
+            Done(DescribeRefusal(response));
+        else
+            Done(_T("Can't connect: ") + event.GetErrorDescription());
+        break;
+    }
+
+    case wxWebRequest::State_Unauthorized:
+        // this isn't a final state, the request would wait for credentials
+        pending_error = PVO_TEST_NOT_AUTHORIZED;
+        request.Cancel();
+        break;
+
+    case wxWebRequest::State_Cancelled:
+        Done(pending_error.empty() ? wxString(_T("Cancelled.")) : pending_error);
+        break;
+
+    default:
+        break;
+    }
+}
+
+
+void PvoTester::OnTimeout(wxTimerEvent& WXUNUSED(event))
+{//=====================================================
+    if(active)
+    {
+        pending_error = wxString::Format(_T("No answer after %d seconds."), PVO_TIMEOUT_MS/1000);
+        request.Cancel();
+    }
+}
+
+
+static PvoTester *tester = NULL;
+
+void PvoTestStart(const wxString &url, const wxString &sid, const wxString &key, wxStaticText *result, wxButton *button)
+{//=====================================================================================================================
+    if(tester == NULL)
+        tester = new PvoTester();
+    tester->Start(url, sid, key, result, button);
+}
+
+
+void PvoTestCancel()
+{//=================
+    if(tester != NULL)
+        tester->Cancel();
 }
 
 
@@ -345,4 +637,6 @@ void PvoShutdown()
 {//===============
     delete uploader;
     uploader = NULL;
+    delete tester;
+    tester = NULL;
 }

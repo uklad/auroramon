@@ -153,6 +153,9 @@ within the <B>Aurora Monitor</B> program.
 	For a single inverter system, the inverter address (which is usually the default value 2)
 	should be put into the first address field, and the other field is left blank.
 	</BLOCKQUOTE>
+	<BLOCKQUOTE>
+	To go back to a single inverter, clear the field of the one you no longer have. This takes effect when you press <B>OK</B>.
+	</BLOCKQUOTE>
 
 <DL>
 <DT>Data directory</DT><DD>
@@ -227,6 +230,17 @@ to gain access.
 <P>
 If an internet connection to pvoutput.org is not available, the <B>Aurora Monitor</B> stores the data and sends it
 later when a connection is established.
+</P>
+<P>
+<B>Test connection</B> checks the URL, System Id and API Key shown in the dialog, before you save them. It asks
+pvoutput.org for your system's details, so it doesn't send or change any data. Each test counts towards pvoutput.org's
+hourly limit of requests, which is 60 unless you have donated. A read-only API Key passes this test, but pvoutput.org
+would refuse its updates.
+</P>
+<P>
+The right of the message line, at the very bottom of the window, shows the state of the updates: <B>off</B>,
+<B>no update yet</B>, or whether the most recent one was <B>OK</B> or <B>failed</B> and at what time. It also shows how
+many readings are <B>waiting</B> to be sent. The reason for a failure is in the message log.
 </P>
 <P>
  <BR>

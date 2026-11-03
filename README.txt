@@ -79,6 +79,12 @@ Inverter clock and daylight saving:
 
 Icon:
 34. Added a program icon, see icons/README.txt.
+35. "Test connection" in Settings->PVOutput.org checks the settings, without
+    sending any data.  The line at the bottom of the window shows the state of
+    the updates.
+36. Crash on Wayland at the next reading after adding a second inverter.
+37. Total power could stay too high after removing an inverter in Setup, if that
+    inverter was being polled at the time.
 
 ---------
 Version 1.07   16.05.2013

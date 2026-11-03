@@ -621,6 +621,7 @@ void DlgRetrieveEnergy::OnButton(wxCommandEvent &event)
 BEGIN_EVENT_TABLE(DlgPvoutput, wxDialog)
 	EVT_BUTTON(dlgOK, DlgPvoutput::OnButton)
 	EVT_BUTTON(dlgCancel, DlgPvoutput::OnButton)
+	EVT_BUTTON(dlgTest, DlgPvoutput::OnButton)
 END_EVENT_TABLE()
 
 
@@ -642,6 +643,9 @@ DlgPvoutput::DlgPvoutput(wxWindow *parent)
     t_instantaneous = new wxCheckBox(this, -1, _T("Include Instantaneous Power"));
     t_grid_voltage = new wxCheckBox(this, -1, _T("Include Grid Voltage"));
     t_temperature = new wxCheckBox(this, -1, _T("Include Inverter Temperature"));
+    button_test = new wxButton(this, dlgTest, _T("Test connection"));
+    // room for a few lines of result, which can't then change the size of the dialog
+    t_test_result = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, wxSize(380, 3*GetCharHeight()), wxST_NO_AUTORESIZE);
 
     options->Add(t_instantaneous);
     options->Add(t_grid_voltage, 0, wxTOP, DLG_GAP/2);
@@ -658,6 +662,10 @@ DlgPvoutput::DlgPvoutput(wxWindow *parent)
     grid->Add(t_live_updates);
     grid->AddSpacer(1);
     grid->Add(options);
+    grid->AddSpacer(1);
+    grid->Add(button_test);
+    grid->AddSpacer(1);
+    grid->Add(t_test_result, 0, wxEXPAND);
 
     button_OK = new wxButton(this, dlgOK, _T("OK"));
     button_OK->SetDefault();
@@ -678,12 +686,22 @@ void DlgPvoutput::ShowDlg()
     t_instantaneous->SetValue(pvoutput.live_updates & PVO_INSTANTANEOUS);
     t_grid_voltage->SetValue(pvoutput.live_updates & PVO_GRID_VOLTAGE);
     t_temperature->SetValue(pvoutput.live_updates & PVO_TEMPERATURE);
+    t_test_result->SetLabelText(wxEmptyString);
+    button_test->Enable();
     ShowModal();
+    PvoTestCancel();   // however the dialog was closed
 }
 
 
 void DlgPvoutput::OnButton(wxCommandEvent &event)
 {//==============================================
+
+    if(event.GetId() == dlgTest)
+    {
+        // test what's in the dialog, which may not have been saved
+        PvoTestStart(t_url->GetValue(), t_system_id->GetValue(), t_api_key->GetValue(), t_test_result, button_test);
+        return;
+    }
 
     if(event.GetId() == dlgOK)
     {
@@ -701,6 +719,7 @@ void DlgPvoutput::OnButton(wxCommandEvent &event)
             pvoutput.live_updates |= PVO_TEMPERATURE;
         pvoutput.failed = 0;
         ConfigSave(1);
+        PvoResetStatus();
     }
     Show(false);
 }
