@@ -1652,7 +1652,7 @@ void Mainframe::OnAbout()
 {
     wxAboutDialogInfo info;
     info.SetName(_("Aurora Monitor"));
-    info.SetVersion(_("1.08"));
+    info.SetVersion(_("test build"), _("Test build"));
     info.SetDescription(_("Receives and displays data from up to 2 Aurora power inverters.\n"));
     info.SetCopyright(_T("(C) 2012 Jonathan Duddington <jonsd@users.sourceforge.net>"));
     info.SetLicence(_T("GNU GENERAL PUBLIC LICENSE Version 3\n\nhttp://www.gnu.org/licenses/gpl.html"));

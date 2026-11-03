@@ -2,14 +2,14 @@
 auroramon-1.07c.zip
 Contains the source code files and also binaries for 32-bit and 64-bit
 Linux.  The binaries are of version 1.07, they don't include the changes
-listed under version 1.08.
+listed below.
 
 setup_auroramon-1.07.exe
 Is the installer for the Windows version.
 
 
 ---------
-Version 1.08   02.11.2026  (modified from 1.07, not by the original author)
+Test builds  (modified from 1.07, not by the original author)
 
 Building now requires wxWidgets 3.1.5 or later (eg. libwxgtk3.2-dev).
 The Windows version is built by GitHub Actions.  It has been run on Windows,

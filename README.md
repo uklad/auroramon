@@ -6,11 +6,11 @@ This is a continuation of [Aurora Monitor](https://sourceforge.net/projects/auro
 
 It's intended for domestic installations rather than commercial ones, so it only supports up to 2 inverters.
 
-Version 1.08 has been updated to support current wxWidgets (3.1.5 or later), as wxWidgets 2.8, which earlier versions used, is no longer available on newer Linux distributions.
+It has been updated to support current wxWidgets (3.1.5 or later), as wxWidgets 2.8, which version 1.07 used, is no longer available on newer Linux distributions. These are test builds, so they don't have a new version number yet.
 
 ## Building on Linux
 
-Version 1.08 needs wxWidgets 3.1.5 or later. Run `wx-config --version` to check what you have. The package below is for Debian and Ubuntu. It may have a different name on other distributions, and Ubuntu 22.04's default wxWidgets is too old.
+You need wxWidgets 3.1.5 or later. Run `wx-config --version` to check what you have. The package below is for Debian and Ubuntu. It may have a different name on other distributions, and Ubuntu 22.04's default wxWidgets is too old.
 
 ```sh
 sudo apt install build-essential git libwxgtk3.2-dev
@@ -77,7 +77,7 @@ These have been tested against a local server, not PVOutput itself.
 
 ## Testing without an inverter
 
-`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. Version 1.08 has only been tested this way on Linux, on X11 and KDE Wayland, and not with a real inverter. On Windows the serial port hasn't been tested at all.
+`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. The test builds have only been tested this way on Linux, on X11 and KDE Wayland, and not with a real inverter. On Windows the serial port hasn't been tested at all.
 
 ## More information
 
