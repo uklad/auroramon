@@ -730,6 +730,161 @@ void DlgPvoutput::OnButton(wxCommandEvent &event)
 
 
 /************************************************************
+                MQTT Dialog
+*************************************************************/
+
+BEGIN_EVENT_TABLE(DlgMqtt, wxDialog)
+	EVT_BUTTON(dlgOK, DlgMqtt::OnButton)
+	EVT_BUTTON(dlgCancel, DlgMqtt::OnButton)
+	EVT_BUTTON(dlgTest, DlgMqtt::OnButton)
+END_EVENT_TABLE()
+
+
+#define N_MQTT_INTERVALS  4
+static const int mqtt_intervals[N_MQTT_INTERVALS] = {5, 10, 30, 60};
+static wxString mqtt_interval_choices[N_MQTT_INTERVALS] = {_T("5 seconds"), _T("10 seconds"), _T("30 seconds"), _T("1 minute")};
+
+DlgMqtt::DlgMqtt(wxWindow *parent)
+    : wxDialog(parent, -1, _T("MQTT (Home Assistant)"))
+{//=================================
+    wxBoxSizer *top = new wxBoxSizer(wxVERTICAL);
+    wxFlexGridSizer *grid = new wxFlexGridSizer(2, DLG_GAP, 2*DLG_GAP);
+
+    t_enabled = new wxCheckBox(this, -1, _T("Publish the readings to an MQTT broker"));
+    t_host = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(280, -1));
+    t_port = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(80, -1));
+    t_username = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(200, -1));
+    t_password = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(200, -1), wxTE_PASSWORD);
+    t_prefix = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(200, -1));
+    t_discovery = new wxTextCtrl(this, -1, wxEmptyString, wxDefaultPosition, wxSize(200, -1));
+    t_interval = new wxChoice(this, -1, wxDefaultPosition, wxDefaultSize, N_MQTT_INTERVALS, mqtt_interval_choices);
+    button_test = new wxButton(this, dlgTest, _T("Test connection"));
+    // room for a few lines of result, which can't then change the size of the dialog
+    t_test_result = new wxStaticText(this, -1, wxEmptyString, wxDefaultPosition, wxSize(380, 3*GetCharHeight()), wxST_NO_AUTORESIZE);
+
+    grid->AddGrowableCol(1);
+    AddGridLabel(this, grid, _T("Broker address"));
+    grid->Add(t_host, 0, wxEXPAND);
+    AddGridLabel(this, grid, _T("Port"));
+    grid->Add(t_port);
+    AddGridLabel(this, grid, _T("User name"));
+    grid->Add(t_username);
+    AddGridLabel(this, grid, _T("Password"));
+    grid->Add(t_password);
+    AddGridLabel(this, grid, _T("Topic prefix"));
+    grid->Add(t_prefix);
+    AddGridLabel(this, grid, _T("Discovery prefix"));
+    grid->Add(t_discovery);
+    AddGridLabel(this, grid, _T("Publish every"));
+    grid->Add(t_interval);
+    grid->AddSpacer(1);
+    grid->Add(new wxStaticText(this, -1, _T("The connection isn't encrypted, so use a broker on your own network.")));
+    grid->AddSpacer(1);
+    grid->Add(button_test);
+    grid->AddSpacer(1);
+    grid->Add(t_test_result, 0, wxEXPAND);
+
+    button_OK = new wxButton(this, dlgOK, _T("OK"));
+    button_OK->SetDefault();
+    button_Cancel = new wxButton(this, dlgCancel, _T("Cancel"));
+
+    top->Add(t_enabled, 0, wxLEFT | wxRIGHT | wxTOP, DLG_BORDER);
+    top->Add(grid, 1, wxEXPAND | wxALL, DLG_BORDER);
+    top->Add(MakeButtonRow(button_OK, button_Cancel), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, DLG_BORDER);
+    SetSizerAndFit(top);
+}
+
+
+void DlgMqtt::ShowDlg()
+{//====================
+    int ix;
+
+    t_enabled->SetValue(mqtt.enabled != 0);
+    t_host->ChangeValue(mqtt.host);
+    t_port->ChangeValue(wxString::Format(_T("%d"), mqtt.port));
+    t_username->ChangeValue(mqtt.username);
+    t_password->ChangeValue(mqtt.password);
+    t_prefix->ChangeValue(mqtt.prefix);
+    t_discovery->ChangeValue(mqtt.discovery);
+    t_interval->SetSelection(1);
+    for(ix = 0; ix < N_MQTT_INTERVALS; ix++)
+    {
+        if(mqtt_intervals[ix] == mqtt.interval)
+            t_interval->SetSelection(ix);
+    }
+    t_test_result->SetLabelText(wxEmptyString);
+    button_test->Enable();
+    ShowModal();
+    MqttTestCancel();   // however the dialog was closed
+}
+
+
+// Returns an error message, or an empty string if the settings are OK.  The port is 0 if it isn't valid.
+wxString DlgMqtt::GetSettings(MQTT_SETTINGS &settings)
+{//===================================================
+    long port;
+
+    settings.port = 0;
+    if(!t_port->GetValue().Trim().Trim(false).ToLong(&port) || (port < 1) || (port > 65535))
+        return(_T("The port must be a number from 1 to 65535, normally 1883."));
+
+    settings.enabled = t_enabled->GetValue() ? 1 : 0;
+    settings.host = t_host->GetValue().Trim().Trim(false);
+    settings.port = (int)port;
+    settings.username = t_username->GetValue();
+    settings.password = t_password->GetValue();
+    settings.prefix = t_prefix->GetValue().Trim().Trim(false);
+    settings.discovery = t_discovery->GetValue().Trim().Trim(false);
+    settings.interval = mqtt_intervals[t_interval->GetSelection()];
+
+    if(settings.enabled && settings.host.empty())
+        return(_T("Enter the broker's address, or untick the box to stop publishing."));
+    return(wxEmptyString);
+}
+
+
+void DlgMqtt::OnButton(wxCommandEvent &event)
+{//==========================================
+    MQTT_SETTINGS settings;
+    wxString error;
+
+    if(event.GetId() == dlgTest)
+    {
+        // test what's in the dialog, which may not have been saved
+        // only the port needs to be valid, the test reports a missing address itself
+        error = GetSettings(settings);
+        if(settings.port == 0)
+        {
+            t_test_result->SetLabelText(error);
+            t_test_result->Wrap(t_test_result->GetSize().x);
+            return;
+        }
+        MqttTestStart(settings, t_test_result, button_test);
+        return;
+    }
+
+    if(event.GetId() == dlgOK)
+    {
+        error = GetSettings(settings);
+        if(!error.empty())
+        {
+            t_test_result->SetLabelText(error);
+            t_test_result->Wrap(t_test_result->GetSize().x);
+            return;    // leave the dialog open
+        }
+        mqtt = settings;
+        ConfigSave(1);
+        MqttRestart();
+    }
+    Show(false);
+}
+
+
+
+//=======================================================================================================================
+
+
+/************************************************************
                 SetTime Dialog
 *************************************************************/
 
