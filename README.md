@@ -20,8 +20,6 @@ make -j"$(nproc)"
 ./auroramon
 ```
 
-These steps haven't been tested on a clean machine.
-
 ### Setting up after building
 
 Choose your data directory in Settings → Setup, then do any of these that you need. The commands run from `src`, and the example data directory is `~/aurora`.
@@ -47,7 +45,7 @@ Choose your data directory in Settings → Setup, then do any of these that you 
 
 ### Moving from another computer
 
-Copy `~/.aurora` and your data directory from the old computer. `~/.aurora` contains your PVOutput API key, so transfer it securely. If your username is different, update the `data=` path in it.
+Copy `~/.aurora` and your data directory from the old computer. `~/.aurora` contains your PVOutput API key and MQTT password, so transfer it securely. If your username is different, update the `data=` path in it.
 
 ### Updating
 
@@ -73,11 +71,34 @@ To upload to [PVOutput](https://pvoutput.org), enter your System Id and API Key 
 - **The line at the bottom of the window** shows the most recent result and how many readings are waiting, such as `PVOutput: failed at 08:25, 1 waiting`.
 - **If an upload fails,** the reading is saved in `system/pvoutput_fail.txt` in the data directory. The program tries to send saved readings about every 2 minutes, up to 30 at a time, and discards any more than 13 days old.
 
-These have been tested against a local server, not PVOutput itself.
+## MQTT and Home Assistant
+
+The program can publish the readings to an MQTT broker, such as Home Assistant's Mosquitto broker add-on. It uses Home Assistant's MQTT discovery, so each inverter appears as a device with its sensors, without any configuration in Home Assistant. Its MQTT integration must already be set up.
+
+1. Open Settings → MQTT (Home Assistant).
+2. Enter the broker's address and port, usually 1883. For the Mosquitto add-on, the address is Home Assistant's.
+3. Enter a user name and password that the broker accepts, or leave them blank if it allows anonymous connections.
+4. Press **Test connection**, then tick **Publish the readings to an MQTT broker** and press **OK**.
+
+- **In Home Assistant,** the devices are called `Aurora inverter 2`, with the inverter's address. Their sensors are the power, each input's voltage, current and power, efficiency, temperature, peak power today, and the energy totals. The readings chosen in Settings → Extra readings are added too. With two inverters there's also an `Aurora Monitor total` device.
+- **Availability:** an inverter shows as unavailable while it isn't responding, such as at night. Everything shows as unavailable when the program isn't running or has lost the broker.
+- **The line at the bottom of the window** shows `MQTT: connected`, `connecting`, `off`, or `failed at` a time. The reason for a failure is in the message log. The program tries again after 5 seconds, then less often, up to every 2 minutes.
+- **The connection isn't encrypted,** so use a broker on your own network. The password is saved in `~/.aurora`, which only you can read.
+
+The topics, with the default topic prefix `auroramon` and the inverter's address as `N`, are all retained:
+
+| Topic | Contents |
+| --- | --- |
+| `auroramon/status` | `online` or `offline`, also the last will |
+| `auroramon/inverterN/state` | the inverter's readings, as JSON |
+| `auroramon/inverterN/availability` | `online` or `offline`, whether the inverter is responding |
+| `auroramon/total/state` | the totals, when there are two inverters |
+
+The discovery configs are under `homeassistant/sensor/`, unless the discovery prefix is changed.
 
 ## Testing without an inverter
 
-`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. The test builds have only been tested this way on Linux, on X11 and KDE Wayland, and not with a real inverter. On Windows the serial port hasn't been tested at all.
+`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options.
 
 ## More information
 

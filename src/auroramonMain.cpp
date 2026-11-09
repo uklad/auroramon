@@ -84,6 +84,7 @@ DlgHistogram *dlg_histogram;
 DlgExtraR *dlg_extrareadings;
 DlgRetrieveEnergy *dlg_retrieve_energy;
 DlgPvoutput *dlg_pvoutput;
+DlgMqtt *dlg_mqtt;
 DlgSetTime *dlg_settime;
 DlgCoords *dlg_coords;
 
@@ -1167,6 +1168,8 @@ LogCommMsg(wxString::Format(_T("Program start: Energy %7.3f  %8.3f %8.3f %9.3f %
                 }
             }
         }
+
+        MqttReadings(inv, ir, tmpr_max);
    }
    else
    {
@@ -1339,6 +1342,10 @@ void Mainframe::OnCommand(wxCommandEvent &event)
         dlg_pvoutput->ShowDlg();
         break;
 
+    case idMenuMqtt:
+        dlg_mqtt->ShowDlg();
+        break;
+
     case idMenuExportPvo:
         SavePvoutput(0);
         break;
@@ -1503,6 +1510,7 @@ void Mainframe::MakeMenus()
         settingsMenu->Append(idMenuSetInverter+1, _T("Inverter B"));
     }
     settingsMenu->Append(idMenuPvoutput, _T("PVOutput.org"));
+    settingsMenu->Append(idMenuMqtt, _T("MQTT (Home Assistant)"));
     settingsMenu->AppendSeparator();
     settingsMenu->Append(idMenuEditCharts, _T("Charts"));
     settingsMenu->Append(idMenuEditHistogram, _T("Histograms"));
@@ -1550,11 +1558,12 @@ Mainframe::Mainframe(wxFrame *frame, const wxString& title)
     int inv;
 
     mainframe = this;
-    CreateStatusBar(2);
+    CreateStatusBar(3);
     {
-        // the second field shows the state of the PVOutput updates
-        int widths[2] = {-1, GetStatusBar()->GetTextExtent(_T("PVOutput: failed at 00:00, 9999 waiting")).x + 24};
-        SetStatusWidths(2, widths);
+        // the second and third fields show the state of the PVOutput updates and MQTT
+        int widths[3] = {-1, GetStatusBar()->GetTextExtent(_T("PVOutput: failed at 00:00, 9999 waiting")).x + 24,
+                         GetStatusBar()->GetTextExtent(_T("MQTT: failed at 00:00")).x + 24};
+        SetStatusWidths(3, widths);
     }
     MakeMenus();
 
@@ -1583,6 +1592,7 @@ Mainframe::Mainframe(wxFrame *frame, const wxString& title)
     dlg_alarms = new DlgAlarms(this);
     dlg_retrieve_energy = new DlgRetrieveEnergy(this);
     dlg_pvoutput = new DlgPvoutput(this);
+    dlg_mqtt = new DlgMqtt(this);
     dlg_settime = new DlgSetTime(this);
     dlg_coords = new DlgCoords(this);
 
@@ -1621,6 +1631,7 @@ void Mainframe::OnStartupTimer(wxTimerEvent& WXUNUSED(event))
 	graph_panel->enable_draw = 1;
 	graph_panel->Refresh();
 	PvoUpdateStatus();
+	MqttStart();
 //	my_event.SetId(idRefreshGraph);
 //  wxPostEvent(graph_panel->GetEventHandler(), my_event);
 }
@@ -1633,6 +1644,7 @@ Mainframe::~Mainframe()
     int ix;
     CommsShutdown();
     PvoShutdown();
+    MqttShutdown();
 
     for(ix=0; ix<N_INV; ix++)
     {

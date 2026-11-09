@@ -97,6 +97,18 @@ void ConfigInit()
     pConfig->Read(_T("apikey"), &pvoutput.key, wxEmptyString);
     pConfig->Read(_T("live_updates"), &pvoutput.live_updates, (long)0);
 
+    pConfig->SetPath(_T("/mqtt"));
+    pConfig->Read(_T("enabled"), &mqtt.enabled, (long)0);
+    pConfig->Read(_T("host"), &mqtt.host, wxEmptyString);
+    pConfig->Read(_T("port"), &mqtt.port, (long)1883);
+    pConfig->Read(_T("username"), &mqtt.username, wxEmptyString);
+    pConfig->Read(_T("password"), &mqtt.password, wxEmptyString);
+    pConfig->Read(_T("prefix"), &mqtt.prefix, _T("auroramon"));
+    pConfig->Read(_T("discovery"), &mqtt.discovery, _T("homeassistant"));
+    pConfig->Read(_T("interval"), &mqtt.interval, (long)10);
+    if(mqtt.interval < 1)
+        mqtt.interval = 10;
+
 	for(inv=0; inv<N_INV; inv++)
 	{
         memset(&inverters[inv], 0, sizeof(inverters[inv]));
@@ -168,6 +180,16 @@ void ConfigSave(int control)
     pConfig->Write(_T("systemid"), pvoutput.sid);
     pConfig->Write(_T("apikey"), pvoutput.key);
     pConfig->Write(_T("live_updates"), pvoutput.live_updates);
+
+    pConfig->SetPath(_T("/mqtt"));
+    pConfig->Write(_T("enabled"), mqtt.enabled);
+    pConfig->Write(_T("host"), mqtt.host);
+    pConfig->Write(_T("port"), mqtt.port);
+    pConfig->Write(_T("username"), mqtt.username);
+    pConfig->Write(_T("password"), mqtt.password);
+    pConfig->Write(_T("prefix"), mqtt.prefix);
+    pConfig->Write(_T("discovery"), mqtt.discovery);
+    pConfig->Write(_T("interval"), mqtt.interval);
 
 	for(inv=0; inv<N_INV; inv++)
 	{

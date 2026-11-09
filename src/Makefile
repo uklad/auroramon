@@ -1,7 +1,7 @@
 # Makefile for 'auroramon' program
 # Requires wxWidgets 3.1.5 or later (for wxWebRequest), eg. package libwxgtk3.2-dev
 
-SRCS= auroramonApp.cpp auroramonMain.cpp chart.cpp dialog.cpp graphdialog.cpp statuspanel.cpp dates.cpp sun.cpp comms.cpp alarms.cpp pvoutput.cpp
+SRCS= auroramonApp.cpp auroramonMain.cpp chart.cpp dialog.cpp graphdialog.cpp statuspanel.cpp dates.cpp sun.cpp comms.cpp alarms.cpp pvoutput.cpp mqtt.cpp
 
 OBJS=$(patsubst %.cpp,%.o,$(SRCS))
 ifeq ($(OS),Windows_NT)

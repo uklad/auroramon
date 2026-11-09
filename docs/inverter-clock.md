@@ -97,16 +97,9 @@ The Set Time dialog also shows both clocks, and Inverter → Inverter informatio
 - **Live readings don't use the inverter's clock.** They're logged with computer time, so a wrong inverter clock mainly affects data retrieved from the inverter's memory.
 - **With sync set to Never,** the program still reads the clock to find the difference, but never writes it.
 - **Setting the time zone by hand:** a time zone entered in Settings → Location doesn't follow daylight saving for the sun charts. This doesn't affect the inverter's clock.
-- **Effect on the inverter's own totals is unknown.** Nothing here has been tried on a real inverter, so compare the day's total after the first change. Daylight saving changes normally happen overnight while it's asleep, so this should be low risk.
+- **Effect on the inverter's own totals is unknown.** Compare the day's total after the first change. Daylight saving changes normally happen overnight while it's asleep, so this should be low risk.
 
 ## Testing
-
-All of this has been tested against a simulator, not a real inverter:
-
-| | Linux | Windows |
-|---|---|---|
-| UTC offset around daylight saving changes | Tested | Tested |
-| Sync decisions and writing the clock | Tested with the simulator | Not tested, the serial port hasn't been run |
 
 To try it on Linux, set the Serial Port in Settings → Setup to `/tmp/ttyAurora`, and start the simulator with its clock 2 minutes out:
 

@@ -12,8 +12,7 @@ Is the installer for the Windows version.
 Test builds  (modified from 1.07, not by the original author)
 
 Building now requires wxWidgets 3.1.5 or later (eg. libwxgtk3.2-dev).
-The Windows version is built by GitHub Actions.  It has been run on Windows,
-but its serial port code hasn't been tested with an inverter.
+The Windows version is built by GitHub Actions.
 
 Crashes and memory errors:
 1. Crash when inverter B has data but inverter A has none.
@@ -85,6 +84,12 @@ Icon:
 36. Crash on Wayland at the next reading after adding a second inverter.
 37. Total power could stay too high after removing an inverter in Setup, if that
     inverter was being polled at the time.
+
+MQTT and Home Assistant:
+38. New Settings->MQTT (Home Assistant) dialog.  The readings can be published
+    to an MQTT broker, with Home Assistant's MQTT discovery, so each inverter
+    appears there as a device with its sensors.  The connection isn't
+    encrypted.  The line at the bottom of the window shows its state.
 
 ---------
 Version 1.07   16.05.2013

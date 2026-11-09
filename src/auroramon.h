@@ -81,6 +81,7 @@ enum
     idMenuSunInfo,
     idMenuInverterState,
     idMenuPvoutput,
+    idMenuMqtt,
 
     idMenuMessageLog,
     idMenuCommLog,
@@ -685,6 +686,47 @@ class DlgPvoutput: public wxDialog
 
 
 typedef struct {
+    int enabled;
+    wxString host;
+    int port;
+    wxString username;
+    wxString password;
+    wxString prefix;       // the start of the topics
+    wxString discovery;    // Home Assistant's discovery prefix
+    int interval;          // seconds between publishing the readings
+} MQTT_SETTINGS;
+
+extern MQTT_SETTINGS mqtt;
+
+class DlgMqtt: public wxDialog
+{//============================
+    public:
+        DlgMqtt(wxWindow *parent);
+        void ShowDlg();
+
+    private:
+        void OnButton(wxCommandEvent &event);
+        wxString GetSettings(MQTT_SETTINGS &settings);
+
+        wxCheckBox *t_enabled;
+        wxTextCtrl *t_host;
+        wxTextCtrl *t_port;
+        wxTextCtrl *t_username;
+        wxTextCtrl *t_password;
+        wxTextCtrl *t_prefix;
+        wxTextCtrl *t_discovery;
+        wxChoice *t_interval;
+        wxButton *button_test;
+        wxStaticText *t_test_result;
+
+        wxButton *button_OK;
+        wxButton *button_Cancel;
+
+    DECLARE_EVENT_TABLE()
+};
+
+
+typedef struct {
     int dsp_code;
     const char *name;
     const char *mnemonic;
@@ -828,6 +870,13 @@ void PvoTestStart(const wxString &url, const wxString &sid, const wxString &key,
 void PvoTestCancel();
 void PvoUpdateStatus();
 void PvoResetStatus();
+void MqttStart();
+void MqttReadings(int inv, INVERTER_RESPONSE *ir, float temperature);
+void MqttRestart();
+void MqttShutdown();
+void MqttUpdateStatus();
+void MqttTestStart(const MQTT_SETTINGS &settings, wxStaticText *result, wxButton *button);
+void MqttTestCancel();
 void InvalidateDates();
 void CommsShutdown();
 
@@ -897,6 +946,7 @@ extern DlgExtraR *dlg_extrareadings;
 extern DlgAlarms *dlg_alarms;
 extern DlgRetrieveEnergy *dlg_retrieve_energy;
 extern DlgPvoutput *dlg_pvoutput;
+extern DlgMqtt *dlg_mqtt;
 extern DlgSetTime *dlg_settime;
 extern DlgCoords *dlg_coords;
 

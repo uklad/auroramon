@@ -25,6 +25,7 @@
       <LI><A HREF="#toc7">Settings -&gt; Location dialog</A>
       <LI><A HREF="#toc8">Settings -&gt; Inverter dialog</A>
       <LI><A HREF="#toc9">Settings -&gt; PVOutput.org</A>
+      <LI><A HREF="#mqtt">Settings -&gt; MQTT (Home Assistant)</A>
       </UL>
   <LI><A HREF="#toc10">4. Inverter Menu</A>
       <UL>
@@ -238,9 +239,71 @@ hourly limit of requests, which is 60 unless you have donated. A read-only API K
 would refuse its updates.
 </P>
 <P>
-The right of the message line, at the very bottom of the window, shows the state of the updates: <B>off</B>,
+The middle of the message line, at the very bottom of the window, shows the state of the updates: <B>off</B>,
 <B>no update yet</B>, or whether the most recent one was <B>OK</B> or <B>failed</B> and at what time. It also shows how
 many readings are <B>waiting</B> to be sent. The reason for a failure is in the message log.
+</P>
+<P>
+ <BR>
+</P>
+
+<A NAME="mqtt"></A>
+<H3>Settings -&gt; MQTT (Home Assistant)</H3>
+
+<P>
+Aurora Monitor can publish the inverters' readings to an MQTT broker, such as the Mosquitto broker add-on of
+<A HREF="https://www.home-assistant.io">Home Assistant</A>. It uses Home Assistant's MQTT discovery, so each inverter
+appears in Home Assistant as a device with its sensors, without any configuration there. Home Assistant's MQTT
+integration must already be set up.
+</P>
+<P>
+Tick <B>Publish the readings to an MQTT broker</B>, and fill in:
+</P>
+<BLOCKQUOTE>
+<B>Broker address</B> and <B>Port</B>: the computer which runs the broker, and its port, which is usually 1883.
+For the Mosquitto add-on, this is the address of Home Assistant.<BR>
+<B>User name</B> and <B>Password</B>: an account which the broker accepts. Leave them blank if the broker allows
+anonymous connections.<BR>
+<B>Topic prefix</B>: the start of the topics which the readings are published to, <B>auroramon</B> unless changed.<BR>
+<B>Discovery prefix</B>: where Home Assistant looks for discovery messages, <B>homeassistant</B> unless it has been
+changed in Home Assistant.<BR>
+<B>Publish every</B>: how often the readings are sent, from 5 seconds to 1 minute.
+</BLOCKQUOTE>
+<P>
+<B>Test connection</B> connects to the broker with the settings shown in the dialog, before you save them, and says
+whether the broker accepted the connection. It doesn't publish anything.
+</P>
+<P>
+The connection isn't encrypted, so use a broker on your own network. The password is saved in the config file
+(<B>.aurora</B> in your home directory on Linux), which only you can read.
+</P>
+<P>
+In Home Assistant, the devices are called <B>Aurora inverter</B> followed by the inverter's address, with sensors
+for the power, the voltage, current and power of each input, efficiency, temperature, peak power today, and the
+energy today, this week, this month, this year, partial and lifetime. Each reading chosen in
+<B>Settings -&gt; Extra readings</B> is also a sensor. When there are two inverters, there is also a device called
+<B>Aurora Monitor total</B> with their total power and energy today.
+</P>
+<P>
+An inverter shows as unavailable in Home Assistant when it isn't responding, such as at night, and everything
+shows as unavailable when Aurora Monitor isn't running or has lost its connection to the broker.
+</P>
+<P>
+The right of the message line, at the very bottom of the window, shows the state of the connection: <B>off</B>,
+<B>connecting</B>, <B>connected</B>, or <B>failed</B> and at what time. The reason for a failure is in the message
+log. After a failure, the program tries again after 5 seconds, then less often, up to every 2 minutes.
+</P>
+<P>
+The topics, where <B>auroramon</B> is the topic prefix and <B>N</B> is the inverter's address, are:
+</P>
+<BLOCKQUOTE>
+<B>auroramon/status</B>: <B>online</B> or <B>offline</B>.<BR>
+<B>auroramon/inverterN/state</B>: the inverter's readings, in JSON.<BR>
+<B>auroramon/inverterN/availability</B>: <B>online</B> or <B>offline</B>, whether the inverter is responding.<BR>
+<B>auroramon/total/state</B>: the totals of both inverters, when there are two.
+</BLOCKQUOTE>
+<P>
+These messages are retained by the broker, so a program which connects later gets the most recent values.
 </P>
 <P>
  <BR>
