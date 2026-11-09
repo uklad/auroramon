@@ -231,8 +231,8 @@ class MqttConnection : public wxEvtHandler
         void Start(const MQTT_SETTINGS &settings, const std::string &client_id, const std::string &will_topic);
         void Close(bool graceful);
         bool Publish(const std::string &topic, const std::string &payload, bool retain);
-        bool IsConnected() { return(state == ST_CONNECTED); }
-        bool IsIdle() { return(state == ST_IDLE); }
+        bool IsConnected() { return(state == MQ_CONNECTED); }
+        bool IsIdle() { return(state == MQ_IDLE); }
         wxString Where() { return(where); }
 
         // called with CallAfter, so they may close or restart the connection
@@ -240,7 +240,7 @@ class MqttConnection : public wxEvtHandler
         std::function<void(const wxString &reason)> on_failed;
 
     private:
-        enum {ST_IDLE, ST_RESOLVING, ST_CONNECTING, ST_WAIT_CONNACK, ST_CONNECTED};
+        enum {MQ_IDLE, MQ_RESOLVING, MQ_CONNECTING, MQ_WAIT_CONNACK, MQ_CONNECTED};
 
         void Resolved(const std::string &ip);
         void SendConnect();
@@ -297,7 +297,7 @@ MqttConnection::MqttConnection()
 {//=============================
     id = ++next_connection_id;
     live_connections[id] = this;
-    state = ST_IDLE;
+    state = MQ_IDLE;
     sock = NULL;
     started = last_tx = last_rx = 0;
     timer.SetOwner(this);
@@ -333,7 +333,7 @@ void MqttConnection::Start(const MQTT_SETTINGS &new_settings, const std::string 
     live_connections[id] = this;
     my_id = id;
 
-    state = ST_RESOLVING;
+    state = MQ_RESOLVING;
     started = time(NULL);
     timer.Start(1000);
 
@@ -363,7 +363,7 @@ void MqttConnection::Resolved(const std::string &ip)
 {//=================================================
     wxIPV4address addr;
 
-    if(state != ST_RESOLVING)
+    if(state != MQ_RESOLVING)
         return;
 
     if(ip.empty() || !addr.Hostname(wxString::FromUTF8(ip.c_str())))
@@ -377,7 +377,7 @@ void MqttConnection::Resolved(const std::string &ip)
     sock->SetEventHandler(*this);
     sock->SetNotify(wxSOCKET_CONNECTION_FLAG | wxSOCKET_INPUT_FLAG | wxSOCKET_OUTPUT_FLAG | wxSOCKET_LOST_FLAG);
     sock->Notify(true);
-    state = ST_CONNECTING;
+    state = MQ_CONNECTING;
     if(sock->Connect(addr, false))
         SendConnect();
     // otherwise wait for wxSOCKET_CONNECTION, or wxSOCKET_LOST if it fails
@@ -416,7 +416,7 @@ void MqttConnection::SendConnect()
     if(flags & 0x40)
         PutString(body, password);
 
-    state = ST_WAIT_CONNACK;
+    state = MQ_WAIT_CONNACK;
     last_rx = time(NULL);
     Queue(0x10, body);
 }
@@ -436,7 +436,7 @@ bool MqttConnection::Publish(const std::string &topic, const std::string &payloa
 {//============================================================================================
     std::string body;
 
-    if(state != ST_CONNECTED)
+    if(state != MQ_CONNECTED)
         return(false);
 
     if(outbuf.size() > MQTT_MAX_OUTPUT)
@@ -448,13 +448,13 @@ bool MqttConnection::Publish(const std::string &topic, const std::string &payloa
     PutString(body, topic);
     body += payload;     // QoS 0, so there's no packet id
     Queue(retain ? 0x31 : 0x30, body);
-    return(state == ST_CONNECTED);
+    return(state == MQ_CONNECTED);
 }
 
 
 void MqttConnection::Flush()
 {//=========================
-    if((sock == NULL) || outbuf.empty() || (state < ST_WAIT_CONNACK))
+    if((sock == NULL) || outbuf.empty() || (state < MQ_WAIT_CONNACK))
         return;
 
     sock->Write(outbuf.data(), outbuf.size());
@@ -527,12 +527,12 @@ void MqttConnection::HandlePacket(unsigned char type, const std::string &body)
     if((type & 0xf0) == 0x20)
     {
         // CONNACK
-        if(state != ST_WAIT_CONNACK)
+        if(state != MQ_WAIT_CONNACK)
             return;
         int code = (body.size() >= 2) ? (unsigned char)body[1] : 255;
         if(code == 0)
         {
-            state = ST_CONNECTED;
+            state = MQ_CONNECTED;
             int my_id = id;
             wxTheApp->CallAfter([my_id]() {
                 std::map<int, MqttConnection *>::iterator it = live_connections.find(my_id);
@@ -565,12 +565,12 @@ void MqttConnection::Fail(const wxString &reason)
 {//==============================================
     int my_id = id;
 
-    if(state == ST_IDLE)
+    if(state == MQ_IDLE)
         return;
 
     DropSocket();
     timer.Stop();
-    state = ST_IDLE;
+    state = MQ_IDLE;
     outbuf.clear();
     inbuf.clear();
 
@@ -585,7 +585,7 @@ void MqttConnection::Fail(const wxString &reason)
 void MqttConnection::Close(bool graceful)
 {//======================================
     // graceful: tell the broker, so that it doesn't publish the will
-    if((state == ST_CONNECTED) && graceful && (sock != NULL))
+    if((state == MQ_CONNECTED) && graceful && (sock != NULL))
     {
         Queue(0xe0, std::string());   // DISCONNECT
         if(!outbuf.empty())
@@ -598,7 +598,7 @@ void MqttConnection::Close(bool graceful)
     }
     DropSocket();
     timer.Stop();
-    state = ST_IDLE;
+    state = MQ_IDLE;
     outbuf.clear();
     inbuf.clear();
 }
@@ -612,7 +612,7 @@ void MqttConnection::OnSocket(wxSocketEvent &event)
     switch(event.GetSocketEvent())
     {
     case wxSOCKET_CONNECTION:
-        if(state == ST_CONNECTING)
+        if(state == MQ_CONNECTING)
             SendConnect();
         break;
 
@@ -625,10 +625,10 @@ void MqttConnection::OnSocket(wxSocketEvent &event)
         break;
 
     case wxSOCKET_LOST:
-        if(state == ST_CONNECTING)
+        if(state == MQ_CONNECTING)
             Fail(_T("can't connect to ") + where);
         else
-        if(state == ST_WAIT_CONNACK)
+        if(state == MQ_WAIT_CONNACK)
             Fail(_T("the broker closed the connection"));
         else
             Fail(_T("lost the connection to ") + where);
@@ -641,7 +641,7 @@ void MqttConnection::OnTimer(wxTimerEvent& WXUNUSED(event))
 {//========================================================
     time_t now = time(NULL);
 
-    if(state == ST_CONNECTED)
+    if(state == MQ_CONNECTED)
     {
         if(now - last_rx > MQTT_KEEPALIVE * 3 / 2)
         {
@@ -654,9 +654,9 @@ void MqttConnection::OnTimer(wxTimerEvent& WXUNUSED(event))
         return;
     }
 
-    if((state != ST_IDLE) && (now - started > MQTT_CONNECT_TIMEOUT))
+    if((state != MQ_IDLE) && (now - started > MQTT_CONNECT_TIMEOUT))
     {
-        if(state == ST_RESOLVING)
+        if(state == MQ_RESOLVING)
             Fail(_T("can't find ") + settings.host);
         else
             Fail(wxString::Format(_T("no answer from %s after %d seconds"), where, MQTT_CONNECT_TIMEOUT));
