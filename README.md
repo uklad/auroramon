@@ -53,7 +53,7 @@ Run `git pull` in the repository, then `make` again in `src`. If `help.html` has
 
 ## Building on Windows
 
-You don't need to build it yourself. Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the latest run's Artifacts on the [Actions page](https://github.com/uklad/auroramon/actions), unzip it and run `auroramon.exe`. GitHub asks you to log in to download Artifacts, and it deletes them after 90 days unless the repository is set to keep them for less.
+You don't need to build it yourself. GitHub Actions builds a Windows version when it's started by hand, see [windows-build.yml](.github/workflows/windows-build.yml). On the [Actions page](https://github.com/uklad/auroramon/actions), choose Windows build, then Run workflow. Download the zip file from the run's Artifacts, unzip it and run `auroramon.exe`. GitHub asks you to log in to download Artifacts, and it deletes them after 90 days unless the repository is set to keep them for less.
 
 To build it yourself, in the MSYS2 UCRT64 shell:
 

@@ -12,7 +12,8 @@ Is the installer for the Windows version.
 Test builds  (modified from 1.07, not by the original author)
 
 Building now requires wxWidgets 3.1.5 or later (eg. libwxgtk3.2-dev).
-The Windows version is built by GitHub Actions.
+The Windows version is built by GitHub Actions, when the "Windows build"
+workflow is run by hand.
 
 Crashes and memory errors:
 1. Crash when inverter B has data but inverter A has none.
