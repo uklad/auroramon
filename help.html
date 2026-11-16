@@ -214,10 +214,14 @@ within the <B>Aurora Monitor</B> program.
 </DL>
 
 	<BLOCKQUOTE>
-	When <B>Aurora Monitor</B> is run for the first time each day, it retrives the 10 second energy data from the
-	inverter.  It stores it as a file <B>yyyy_out/rA_yyyymmdd</B> (where <B>A</B> is the inverter address and <B>yyyymmdd</B>
-	is today's date), as 5 minute data suitable for use with pvoutput.org.   The 10 second energy data is also
-	used to fill in any gaps in the power output chart.
+	At the first reading each day when the inverter is producing, <B>Aurora Monitor</B> retrieves the 10 second
+	energy data from the inverter.  It stores it as a file <B>yyyy_out/rA_yyyymmdd</B> (where <B>A</B> is the inverter
+	address and <B>yyyymmdd</B> is today's date), as 5 minute data suitable for use with pvoutput.org.
+	</BLOCKQUOTE>
+	<BLOCKQUOTE>
+	The 10 second energy data is also used to fill in the gaps from times when <B>Aurora Monitor</B> wasn't running:
+	in the power output chart, in the 5 minute energy file, and in the data sent to pvoutput.org, see
+	<A HREF="#toc15">Retrieve 10 second energy</A>.  With two inverters, tick this for both of them.
 	</BLOCKQUOTE>
 
 <A NAME="toc9"></A>
@@ -560,11 +564,15 @@ This will enable the <B>Aurora Monitor</B> histogram to display correctly.
 <H2>6.3. Five minute energy files</H2>
 
 <P>
-The directory <B>yyyy_out</B> (where yyyy is the year) contains a file <B>e5min_yyyymmdd.txt</B> for each inverter
-for each day during which data is received.
+The directory <B>yyyy_out</B> (where yyyy is the year) contains a file <B>e5min_yyyymmdd.txt</B>
+for each day during which data is received.  With two inverters, it has their totals.
 These contain the total <B>Energy Generated</B> for the day, the instantaneous <B>Power Generated</B>, and the
 <B>Grid Voltage</B> at 5 minute intervals in a form which is suitable for pasting into the "Live Loader"
 form at <A HREF="http://www.pvoutput.org">www.pvoutput.org</A>.
+</P>
+<P>
+Gaps from times when <B>Aurora Monitor</B> wasn't running are filled from the retrieved 10 second energy data.
+These lines have the average power over the 5 minutes, and no temperature or grid voltage.
 </P>
 <P>
 Alternatively, <B>Settings-&gt;PVOutput.org</B> can be used to send data to <A HREF="http://www.pvoutput.org">www.pvoutput.org</A> automatically
@@ -614,6 +622,38 @@ In addition to the year directories, a <B>system</B> directory may be created.  
 	<BLOCKQUOTE>
 	These have filenames of the form <B>alarmsN_A.txt</B> where <B>N</B> is the inverter number 0 or 1, and <B>A</B> is then
 	inverter address.  They list the time and type of alarms which occurred while <B>Aurora Monitor</B> was running.
+	</BLOCKQUOTE>
+
+<UL>
+<LI>Message log.
+<P></P>
+</UL>
+
+	<BLOCKQUOTE>
+	The file <B>message_log.txt</B> records events such as retrieving data from the inverters, gaps which were filled,
+	updates to pvoutput.org which failed, the MQTT connection, changes to the inverter's clock, and serial port errors.
+	</BLOCKQUOTE>
+
+<UL>
+<LI>Readings waiting for pvoutput.org.
+<P></P>
+</UL>
+
+	<BLOCKQUOTE>
+	The file <B>pvoutput_fail.txt</B> contains readings which haven't been sent to pvoutput.org yet, because an update
+	failed or because they were filled from the 10 second energy data.  They are sent in batches about every 2 minutes,
+	and readings more than 13 days old are discarded.
+	</BLOCKQUOTE>
+
+<UL>
+<LI>Retrieved 10 second energy data.
+<P></P>
+</UL>
+
+	<BLOCKQUOTE>
+	These have filenames of the form <B>energy_10sec_A.txt</B> where <B>A</B> is the inverter address.  Each contains
+	the 10 second energy data which was most recently retrieved from that inverter.  It's kept so that the gaps can be
+	filled when there are two inverters and their data is retrieved at different times.
 	</BLOCKQUOTE>
 <P>
  <BR>
