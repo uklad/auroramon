@@ -99,7 +99,13 @@ The discovery configs are under `homeassistant/sensor/`, unless the discovery pr
 
 ## Testing without an inverter
 
-`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options.
+`tests/fake_inverter.py` simulates inverters on a pseudo-terminal. Run it with `--help` for its options. For example, this simulates an inverter at address 2 with 3 days of stored 10 second data, which is used to try filling the PVOutput gaps:
+
+```sh
+python3 tests/fake_inverter.py --link /tmp/ttyAurora --addr 2 --history 3
+```
+
+Then set the Serial Port in Settings → Setup to `/tmp/ttyAurora`.
 
 ## More information
 
