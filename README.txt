@@ -12,7 +12,8 @@ Is the installer for the Windows version.
 Test builds  (modified from 1.07, not by the original author)
 
 Building now requires wxWidgets 3.1.5 or later (eg. libwxgtk3.2-dev).
-The Windows version is built by GitHub Actions.
+The Windows version is built by GitHub Actions, when the "Windows build"
+workflow is run by hand.
 
 Crashes and memory errors:
 1. Crash when inverter B has data but inverter A has none.
@@ -90,6 +91,13 @@ MQTT and Home Assistant:
     to an MQTT broker, with Home Assistant's MQTT discovery, so each inverter
     appears there as a device with its sensors.  The connection isn't
     encrypted.  The line at the bottom of the window shows its state.
+
+PVOutput.org:
+39. Gaps in the data from times when the program wasn't running are filled
+    from the 10 second energy data retrieved from the inverter, and sent to
+    PVOutput.org.  The gaps in the yyyy_out/e5min_yyyymmdd.txt files are filled
+    too.  Use Settings->Inverter->Auto retrieve 5 minute energy data to retrieve
+    the data at the first reading of each day.
 
 ---------
 Version 1.07   16.05.2013

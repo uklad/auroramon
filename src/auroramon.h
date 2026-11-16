@@ -865,6 +865,9 @@ extern wxMutex comms_mutex;
 
 void PvoSendLive(const wxString &query, const wxString &fail_line);
 void ResendPvoutput(int timeval);
+void PvoQueueStatus(const wxString &line);
+void PvoBackfill();
+wxString TenSecFileName(int address);
 void PvoShutdown();
 void PvoTestStart(const wxString &url, const wxString &sid, const wxString &key, wxStaticText *result, wxButton *button);
 void PvoTestCancel();

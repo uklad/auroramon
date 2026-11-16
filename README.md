@@ -53,7 +53,7 @@ Run `git pull` in the repository, then `make` again in `src`. If `help.html` has
 
 ## Building on Windows
 
-You don't need to build it yourself. Every push to GitHub builds a Windows version, see [windows-build.yml](.github/workflows/windows-build.yml). Download the zip file from the latest run's Artifacts on the [Actions page](https://github.com/uklad/auroramon/actions), unzip it and run `auroramon.exe`. GitHub asks you to log in to download Artifacts, and it deletes them after 90 days unless the repository is set to keep them for less.
+You don't need to build it yourself. GitHub Actions builds a Windows version when it's started by hand, see [windows-build.yml](.github/workflows/windows-build.yml). On the [Actions page](https://github.com/uklad/auroramon/actions), choose Windows build, then Run workflow. Download the zip file from the run's Artifacts, unzip it and run `auroramon.exe`. GitHub asks you to log in to download Artifacts, and it deletes them after 90 days unless the repository is set to keep them for less.
 
 To build it yourself, in the MSYS2 UCRT64 shell:
 
@@ -70,6 +70,7 @@ To upload to [PVOutput](https://pvoutput.org), enter your System Id and API Key 
 - **Test connection** checks the settings in the dialog with PVOutput's read-only Get System service, because PVOutput has no test mode. It sends no readings, but it counts towards PVOutput's hourly request limit. A read-only API key passes this test and then fails when uploading.
 - **The line at the bottom of the window** shows the most recent result and how many readings are waiting, such as `PVOutput: failed at 08:25, 1 waiting`.
 - **If an upload fails,** the reading is saved in `system/pvoutput_fail.txt` in the data directory. The program tries to send saved readings about every 2 minutes, up to 30 at a time, and discards any more than 13 days old.
+- **Gaps while the program wasn't running** are filled from the inverter's 10 second energy data. Tick Settings → Inverter → Auto retrieve 5 minute energy data, and the program retrieves it at the first reading of each day, which can take 20 minutes or more. Readings are worked out for the missing 5 minute periods and sent with the next batches. The inverter keeps about 24 hours of generating time, so this covers a night or a day, but not longer. With two inverters, tick it for both, because PVOutput gets their total.
 
 ## MQTT and Home Assistant
 

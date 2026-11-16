@@ -614,6 +614,19 @@ void PvoSendLive(const wxString &query, const wxString &fail_line)
 }
 
 
+// Adds a status to the ones waiting to be sent in the next batch
+void PvoQueueStatus(const wxString &line)
+{//======================================
+    FILE *f;
+
+    if((f = fopen(FailFileName().mb_str(wxConvLocal), "a")) != NULL)
+    {
+        fprintf(f, "%s\n", (const char *)line.mb_str(wxConvLocal));
+        fclose(f);
+    }
+}
+
+
 void ResendPvoutput(int timeval)
 {//=============================
     // 'timeval' only needs to change whenever a resend attempt is due

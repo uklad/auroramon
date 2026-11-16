@@ -1924,7 +1924,10 @@ void Mainframe::OnInverterEvent(wxCommandEvent &event)
         {
             // 10-second energy data has been retrieved from an inverter
             UpdatePowerData(fname);
-            wxRemoveFile(fname);
+            // keep it, to fill gaps in the PVOutput data, which may need both inverters' data
+            if(!wxRenameFile(fname, TenSecFileName(CE_inv_addr), true))
+                wxRemoveFile(fname);
+            PvoBackfill();
         }
 
         fname = data_dir + _T("/system/energy_daily");
