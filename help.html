@@ -244,6 +244,10 @@ The middle of the message line, at the very bottom of the window, shows the stat
 many readings are <B>waiting</B> to be sent. The reason for a failure is in the message log.
 </P>
 <P>
+To fill the gaps in pvoutput.org's data from times when <B>Aurora Monitor</B> wasn't running, tick
+<B>Settings -&gt; Inverter -&gt; Auto retrieve 5 minute energy data</B>, see <A HREF="#toc15">Retrieve 10 second energy</A>.
+</P>
+<P>
  <BR>
 </P>
 
@@ -387,6 +391,19 @@ is today's date.
 <P>
 Whenever the 10 second (or 5 minute) energy data is retrieved, it is also used to fill in any gaps in the
 power ouput graph, for example for periods during which <B>Aurora Monitor</B> was not collecting data from the inverter.
+</P>
+<P>
+It also fills the gaps in the 5 minute energy file (<B>yyyy_out/e5min_yyyymmdd.txt</B>), and if live updates to
+pvoutput.org are on, the readings for those times are sent to pvoutput.org with the next batch of updates. The power for
+each 5 minute period is its average power, and the energy so far that day is worked out from the nearest reading in the
+5 minute file. The <B>Message log</B> says how many readings were filled.
+</P>
+<P>
+The inverter keeps about 24 hours of 10 second data, counting only the time when it's producing, so this fills a night
+or a day when <B>Aurora Monitor</B> wasn't running, but not longer. pvoutput.org only accepts readings from the last
+14 days. With two inverters, a period is only filled when the data has been retrieved from both of them, because
+pvoutput.org gets their total. Retrieving all of the 10 second data can take 20 minutes or more, while the inverters are
+still being monitored.
 </P>
 <P>
  <BR>

@@ -91,6 +91,13 @@ MQTT and Home Assistant:
     appears there as a device with its sensors.  The connection isn't
     encrypted.  The line at the bottom of the window shows its state.
 
+PVOutput.org:
+39. Gaps in the data from times when the program wasn't running are filled
+    from the 10 second energy data retrieved from the inverter, and sent to
+    PVOutput.org.  The gaps in the yyyy_out/e5min_yyyymmdd.txt files are filled
+    too.  Use Settings->Inverter->Auto retrieve 5 minute energy data to retrieve
+    the data at the first reading of each day.
+
 ---------
 Version 1.07   16.05.2013
 

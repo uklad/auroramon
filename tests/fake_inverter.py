@@ -9,6 +9,9 @@
 --fail-sets ignores this many requests to set the clock.  The program sends each
 set up to 3 times, so 3 of these make one failed set.
 --lose-set-replies makes this many requests to set the clock work, with no reply.
+--history fills the stored 10 second data with this many days of production before
+today, from 07:30 to 16:30 each day, up to now.  Without it, the stored data is a
+single run at constant power which starts an hour ago.
 Like a real inverter its clock knows nothing about daylight saving, so it will
 differ from local time by an hour after a change, until it's set.
 
@@ -16,6 +19,7 @@ Set the Serial Port in auroramon's Setup dialog to the --link path. Only the
 listed addresses respond, so leave one out to simulate a dead inverter.
 """
 import argparse
+import math
 import os
 import pty
 import select
@@ -39,6 +43,34 @@ STARTED = int(time.time()) - 3600
 clock_error = time.localtime().tm_gmtoff   # the inverter's clock minus UTC, seconds
 clock_drift = 0
 DRIFT_START = time.time()
+TENSEC_WORDS = 8640      # size of the 10 second memory, which wraps round
+HISTORY_PEAK = 6000      # raw 10 second value at midday
+history = None           # (ring of 10 second words, index of the oldest)
+
+
+def make_history(days):
+    """Days of production, written into the ring as the inverter would have."""
+    words = []
+    now = time.time()
+    lt = time.localtime(now)
+    for back in range(days, -1, -1):
+        day0 = time.mktime((lt.tm_year, lt.tm_mon, lt.tm_mday - back, 0, 0, 0, 0, 0, -1))
+        start, end = day0 + 7.5 * 3600, min(day0 + 16.5 * 3600, now)
+        if start >= now:
+            break
+        stamp = int(start) + clock_error - TIME_BASE   # the inverter's clock is local time
+        words += [0xffff, stamp >> 16, stamp & 0xffff]
+        t = start
+        while t + 10 <= end:
+            words.append(int(HISTORY_PEAK * math.sin(math.pi * (t - start) / (9 * 3600))))
+            t += 10
+    if len(words) < TENSEC_WORDS:
+        raise SystemExit("--history needs more days to fill the 10 second memory")
+    oldest = len(words) % TENSEC_WORDS
+    ring = [0] * TENSEC_WORDS
+    for i, w in enumerate(words[-TENSEC_WORDS:]):
+        ring[(oldest + i) % TENSEC_WORDS] = w
+    return ring, oldest
 
 
 def stored_words(address):
@@ -48,6 +80,10 @@ def stored_words(address):
         if slot > DAILY_TODAY_SLOT:
             return 0xffff, 0xffff   # unused
         return 20000 - (DAILY_TODAY_SLOT - slot), 3000 + slot   # date code, Wh
+    if history:
+        ring = history[0]
+        ix = (address - TENSEC_BASE) // 2
+        return ring[ix % TENSEC_WORDS], ring[(ix + 1) % TENSEC_WORDS]
     # 10 second data: a 0xffff marker and a timestamp, then readings
     stamp = STARTED - TIME_BASE
     if address == TENSEC_BASE:
@@ -99,7 +135,10 @@ def reply(request):
     elif op == 77:   # configuration
         body = bytes([0, 6, 0, 0, 0, 0])
     elif op == 75:   # start address of the stored data, param 1=10 second, 2=daily
-        start = TENSEC_BASE if param == 1 else DAILY_BASE + DAILY_TODAY_SLOT * 4
+        if param == 1:
+            start = TENSEC_BASE + 2 * history[1] if history else TENSEC_BASE
+        else:
+            start = DAILY_BASE + DAILY_TODAY_SLOT * 4
         body = bytes([0, 6]) + struct.pack(">HH", start, 0)
     elif op == 79:   # read stored data
         body = bytes([0, 6]) + struct.pack(">HH", *stored_words((param << 8) | request[3]))
@@ -120,10 +159,13 @@ def main():
     parser.add_argument("--clock-drift", type=float, default=0, help="seconds gained by the clock per second")
     parser.add_argument("--fail-sets", type=int, default=0, help="requests to set the clock to ignore")
     parser.add_argument("--lose-set-replies", type=int, default=0, help="requests to set the clock which work, with no reply")
+    parser.add_argument("--history", type=int, default=0, help="days of stored 10 second data before today")
     args = parser.parse_args()
-    global clock_error, clock_drift
+    global clock_error, clock_drift, history
     clock_error += args.clock_error
     clock_drift = args.clock_drift
+    if args.history:
+        history = make_history(args.history)
     log = open(args.log, "a", buffering=1) if args.log else None
 
     master, slave = pty.openpty()   # keep slave open, so the master survives auroramon closing it
